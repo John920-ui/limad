@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+<meta name="apple-mobile-web-app-title" content="ልማድ"/>
+<meta name="theme-color" content="#0D0D0D"/>
+<title>ልማድ</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#0D0D0D;font-family:'Segoe UI',Helvetica,Arial,sans-serif;overflow-x:hidden}
+#app{max-width:430px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:80px}
+button{cursor:pointer;font-family:inherit}
+input,textarea,select{font-family:inherit}
+::-webkit-scrollbar{display:none}
+input[type=time]::-webkit-calendar-picker-indicator{filter:invert(1)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeup{0%{opacity:1;transform:translateX(-50%) translateY(0)}100%{opacity:0;transform:translateX(-50%) translateY(-24px)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+@keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(110vh) rotate(540deg);opacity:0}}
+@keyframes popIn{0%{transform:scale(.8);opacity:0}100%{transform:scale(1);opacity:1}}
+.page{display:none}.page.active{display:block}
+.tab-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:4px 2px;flex:1 0 auto;min-width:52px}
+.tab-ico{font-size:18px;transition:font-size .15s}
+.tab-lbl{font-size:8.5px;white-space:nowrap;transition:color .15s}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ── Storage (localStorage) ───────────────────────────────────────
+const LS = {
+  get(k){try{const v=localStorage.getItem('lm:'+k);return v!=null?JSON.parse(v):null}catch{return null}},
+  set(k,v){try{localStorage.setItem('lm:'+k,JSON.stringify(v))}catch{}}
+};
+
+// ── Constants ────────────────────────────────────────────────────
+const DAYS_AM=['እሑድ','ሰኞ','ማክሰኞ','ረቡዕ','ሐሙስ','ዓርብ','ቅዳሜ'];
+const DAYS_EN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DAYS_S_AM=['እሑ','ሰኞ','ማክ','ረቡ','ሐሙ','ዓር','ቅዳ'];
+const DAYS_S_EN=['Su','Mo','Tu','We','Th','Fr','Sa'];
+const MONTHS_AM=['ጃኑ','ፌብ','ማርች','ኤፕ','ሜይ','ጁን','ጁላ','ኦገ','ሴፕ','ኦክ','ኖቬ','ዲሴ'];
+const MONTHS_EN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CATS_AM=['💪 ጤና','📖 ትምህርት','🙏 መንፈስ','💧 ራስ እንክብካቤ','🎯 ምርታማነት'];
+const CATS_EN=['💪 Health','📖 Learning','🙏 Spirit','💧 Self-care','🎯 Productivity'];
+const AVATARS=['🧑','👩','🧔','👨‍🎓','👩‍🎓','🧑‍💼','👩‍💼','🧑‍🚀','🦁','🐯','🦅','🐉'];
+const CH_AM=['ዛሬ 2 ሊትር ውሃ ጠጣ','30 ደቂቃ አንብብ','10 ደቂቃ ተራመድ','5 ደቂቃ ጸልይ/ተነፍስ','ምንም ስኳር አትብላ','15 ደቂቃ ስፖርት ስራ','አንድ ሰው እርዳ','ምስጋና ጻፍ','1 ሊትር ውሃ ጠጣ ጠዋት','10 ደቂቃ አንብብ'];
+const CH_EN=['Drink 2L of water','Read for 30 minutes','Walk for 10 minutes','Meditate for 5 minutes','No sugar today','Exercise 15 minutes','Help someone today','Write gratitude','Drink 1L water in morning','Read for 10 minutes'];
+
+const THEMES={
+  dark:  {n:'Dark',  BG:'#0D0D0D',CARD:'#141414',AC:'#E8C547',MU:'#2A2A2A',TX:'#E8E8E8',DM:'#555',SB:'#1A1A1A',BD:'#1E1E1E'},
+  green: {n:'Green', BG:'#050F0A',CARD:'#0D1F15',AC:'#4ADE80',MU:'#1A3A25',TX:'#E8F5EE',DM:'#4A7A5A',SB:'#0A1A10',BD:'#1A3020'},
+  purple:{n:'Purple',BG:'#0A080F',CARD:'#130F1E',AC:'#A78BFA',MU:'#2A2040',TX:'#EDE8F5',DM:'#6A5A8A',SB:'#100D18',BD:'#1E1830'},
+  blue:  {n:'Blue',  BG:'#080C14',CARD:'#0F1624',AC:'#60A5FA',MU:'#1A2A40',TX:'#E8EFFE',DM:'#4A6A8A',SB:'#0C1220',BD:'#162030'},
+  amoled:{n:'AMOLED',BG:'#000000',CARD:'#0A0A0A',AC:'#FFFFFF',MU:'#222',   TX:'#FFFFFF',DM:'#666',   SB:'#050505',BD:'#181818'},
+  gold:  {n:'Gold',  BG:'#0F0A02',CARD:'#1A1206',AC:'#FFD700',MU:'#332608',TX:'#FFF8E8',DM:'#8A7440',SB:'#140E04',BD:'#2A1F08'},
+  red:   {n:'Red',   BG:'#0F0303',CARD:'#1F0A0A',AC:'#EF4444',MU:'#3A1414',TX:'#FCE8E8',DM:'#8A5050',SB:'#150505',BD:'#2A1010'},
+  orange:{n:'Orange',BG:'#0F0701',CARD:'#1F1206',AC:'#FB923C',MU:'#3A2410',TX:'#FCEEE0',DM:'#8A6840',SB:'#150A02',BD:'#2A1A08'},
+  pink:  {n:'Pink',  BG:'#0F0509',CARD:'#1F0D17',AC:'#F472B6',MU:'#3A1828',TX:'#FCE8F2',DM:'#8A5070',SB:'#150810',BD:'#2A1220'},
+};
+
+const XP_PER=10, CH_XP=25;
+
+// ── State ────────────────────────────────────────────────────────
+let ST={
+  screen:'splash', // splash|pin|app
+  tab:'home',
+  lang:'am',
+  theme:'dark',
+  hasPin:false,
+  habits:[],
+  logs:{},      // {dateKey: [habitId,...]}
+  xpLog:{},     // {dateKey: xp earned}
+  xp:0,
+  profile:{},
+  freezeDates:[],
+  freezeAvail:1,
+  challenge:'',
+  challengeDate:'',
+  challengeDone:false,
+  soundOn:true,
+  digits:[],
+  pinErr:false,
+  addForm:{name:'',cat:'',notes:'',reminder:''},
+  editNoteId:null,
+  calMonth:new Date().getMonth(),
+  calYear:new Date().getFullYear(),
+  chartRange:'weekly',
+  confetti:false,
+  flash:null,
+};
+
+function dk(d=new Date()){return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
+function today(){return dk()}
+function done(){return ST.logs[today()]||[]}
+
+function T(){return THEMES[ST.theme]}
+function L(key){
+  const t=ST.lang;
+  const TXT={
+    appName:{am:'ልማድ',en:'LIMAD'},
+    tagline:{am:'ቀን ተከታታይ ልማዶችን ግንባ',en:'Build consistent daily habits'},
+    tagSub:{am:'ትናንሽ ርምጃዎች ትልቅ ለውጥ ያመጣሉ',en:'Small steps lead to big change'},
+    start:{am:'ጀምር →',en:'Get Started →'},
+    pinHint:{am:'PIN lock · Offline · ሙሉ ዳታ ተጠብቆ ይቀራል',en:'PIN lock · Fully offline · Data persists'},
+    pinEnter:{am:'PIN አስገቡ',en:'Enter PIN'},
+    pinNew:{am:'አዲስ PIN ምረጡ (4 ቁጥሮች)',en:'Choose new PIN (4 digits)'},
+    today:{am:'ዛሬ',en:'Today'},
+    calendar:{am:'ቀን',en:'Cal'},
+    charts:{am:'ግራፍ',en:'Charts'},
+    ai:{am:'AI',en:'AI'},
+    awards:{am:'ሽልማት',en:'Awards'},
+    add:{am:'＋',en:'＋'},
+    profile:{am:'መለያ',en:'Profile'},
+    settings:{am:'ቅንብር',en:'Settings'},
+    level:{am:'ደረጃ',en:'Level'},
+    streak:{am:'ተከታታይ',en:'Streak'},
+    done:{am:'ተጠናቀቀ',en:'Done'},
+    doneToday:{am:'ዛሬ ተጠናቅቀዋል',en:'completed today'},
+    perfect:{am:'✨ ፍጹም ቀን!',en:'✨ Perfect day!'},
+    noHabits:{am:'ልማዶች አልተጨመሩም',en:'No habits yet'},
+    addFirst:{am:'+ አዲስ ልማድ ጨምር',en:'+ Add your first habit'},
+    newHabit:{am:'አዲስ ልማድ',en:'New Habit'},
+    name:{am:'ስም',en:'Name'},
+    namePH:{am:'ለምሳሌ፦ ውሃ ጠጣ',en:'e.g. Drink water'},
+    cat:{am:'ምድብ',en:'Category'},
+    notes:{am:'ማስታወሻ',en:'Notes'},
+    notesPH:{am:'ስለዚህ ልማድ ማስታወሻ...',en:'Notes about this habit...'},
+    reminder:{am:'ማስታወሻ ሰዓት',en:'Reminder time'},
+    save:{am:'ጨምር ✓',en:'Add ✓'},
+    challenge:{am:'የዕለቱ ተግባር',en:'Daily Challenge'},
+    chDone:{am:'ተጠናቀቀ! +25 XP',en:'Done! +25 XP'},
+    freeze:{am:'🧊 Freeze Day',en:'🧊 Freeze Day'},
+    freezeDesc:{am:'አንድ ቀን ቢያመልጥ streak ይጠብቃል',en:'Protects streak if you miss a day'},
+    useFreeze:{am:'Freeze ተጠቀም',en:'Use Freeze'},
+    freezeUsed:{am:'ጥቅም ላይ ውሏል',en:'Used'},
+    aiCoach:{am:'AI አሠልጣኝ',en:'AI Coach'},
+    askCoach:{am:'አሠልጣኙን ጠይቅ',en:'Ask the coach'},
+    thinking:{am:'እያሰበ ነው...',en:'Thinking...'},
+    askAgain:{am:'ዳግም ጠይቅ',en:'Ask again'},
+    achievements:{am:'ሽልማቶች',en:'Achievements'},
+    unlocked:{am:'✓ ተሸልሟል',en:'✓ Unlocked'},
+    themeChoose:{am:'ቀለም ምረጥ',en:'Choose theme'},
+    dataManage:{am:'ዳታ አስተዳደር',en:'Data Management'},
+    export:{am:'📥 ላክ',en:'📥 Export'},
+    import:{am:'📂 አምጣ',en:'📂 Import'},
+    advStats:{am:'ስታቲስቲክስ',en:'Statistics'},
+    compRate:{am:'የማጠናቀቅ መጠን',en:'Completion rate'},
+    longStreak:{am:'ረዘም ያለ streak',en:'Longest streak'},
+    bestMonth:{am:'ምርጥ ወር',en:'Best month'},
+    totalDays:{am:'ጠቅላላ ቀናት',en:'Total days'},
+    profileTitle:{am:'መለያ',en:'Profile'},
+    username:{am:'ስም',en:'Username'},
+    totalXp:{am:'ጠቅላላ XP',en:'Total XP'},
+    bestStreak:{am:'ምርጥ streak',en:'Best streak'},
+    joinDate:{am:'የተቀላቀለበት ቀን',en:'Join date'},
+    saveProfile:{am:'አስቀምጥ',en:'Save'},
+    avatarPick:{am:'Avatar ምረጥ',en:'Pick avatar'},
+    lang:{am:'ቋንቋ',en:'Language'},
+    sound:{am:'ድምጽ',en:'Sound'},
+    weekly:{am:'ሳምንታዊ',en:'Weekly'},
+    monthly:{am:'ወራዊ',en:'Monthly'},
+    completion:{am:'የማጠናቀቅ %',en:'Completion %'},
+    xpChart:{am:'XP',en:'XP'},
+    homeBtn:{am:'🏠 Home',en:'🏠 Home'},
+    resetPin:{am:'🔒 PIN ዳግም ጀምር',en:'🔒 Reset PIN'},
+    notifBtn:{am:'🔔 ማስታወቂያ ፍቀድ',en:'🔔 Allow Notifications'},
+    notifOn:{am:'✓ ማስታወቂያ ነቅቷል',en:'✓ Notifications enabled'},
+  };
+  return (TXT[key]&&TXT[key][t])||key;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+function lvlInfo(xp){let l=1,r=xp;while(r>=l*100){r-=l*100;l++;}return{lvl:l,rem:r,need:l*100}}
+function calcStreak(){
+  let s=0,d=new Date();
+  while(true){const k=dk(d);if(ST.logs[k]&&ST.logs[k].length>0){s++;d.setDate(d.getDate()-1);}else if(ST.freezeDates.includes(k)){d.setDate(d.getDate()-1);}else break;}
+  return s;
+}
+function calcLongest(){
+  const keys=Object.keys(ST.logs).filter(k=>ST.logs[k]&&ST.logs[k].length>0).sort();
+  if(!keys.length)return 0;
+  let max=1,cur=1;
+  for(let i=1;i<keys.length;i++){
+    const[y1,m1,d1]=keys[i-1].split('-').map(Number);
+    const[y2,m2,d2]=keys[i].split('-').map(Number);
+    const diff=Math.round((new Date(y2,m2-1,d2)-new Date(y1,m1-1,d1))/86400000);
+    if(diff===1){cur++;max=Math.max(max,cur);}else cur=1;
+  }
+  return max;
+}
+function bestMonth(){
+  const counts={};
+  Object.entries(ST.logs).forEach(([k,v])=>{if(!v||!v.length)return;const[y,m]=k.split('-');const key=`${y}-${m}`;counts[key]=(counts[key]||0)+v.length;});
+  const keys=Object.keys(counts);if(!keys.length)return'—';
+  const best=keys.reduce((a,b)=>counts[a]>counts[b]?a:b);
+  const[y,m]=best.split('-').map(Number);
+  return`${(ST.lang==='am'?MONTHS_AM:MONTHS_EN)[m-1]} ${y}`;
+}
+function compRate(){
+  const dates=Object.keys(ST.logs);
+  if(!dates.length||!ST.habits.length)return 0;
+  const tot=dates.length*ST.habits.length;
+  const done=dates.reduce((a,k)=>a+(ST.logs[k]?.length||0),0);
+  return Math.round((done/tot)*100);
+}
+
+function playDing(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    o.frequency.value=880;o.type='sine';
+    g.gain.setValueAtTime(0.15,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+    o.start();o.stop(ctx.currentTime+0.4);
+  }catch{}
+}
+
+function showFlash(msg){
+  ST.flash=msg;render();
+  setTimeout(()=>{ST.flash=null;render();},1300);
+}
+
+function loadState(){
+  const pin=LS.get('pin'); ST.hasPin=!!pin;
+  ST.habits=LS.get('habits')||[];
+  ST.logs=LS.get('logs')||{};
+  ST.xpLog=LS.get('xpLog')||{};
+  ST.xp=LS.get('xp')||0;
+  ST.theme=LS.get('theme')||'dark';
+  ST.lang=LS.get('lang')||'am';
+  ST.profile=LS.get('profile')||{};
+  ST.freezeDates=LS.get('freezeDates')||[];
+  ST.freezeAvail=LS.get('freezeAvail')??1;
+  ST.soundOn=LS.get('soundOn')??true;
+  // daily challenge
+  const cd=LS.get('challengeDate');
+  const cv=LS.get('challenge');
+  const cdd=LS.get('challengeDoneDate');
+  if(cd===today()&&cv){ST.challenge=cv;ST.challengeDate=cd;ST.challengeDone=cdd===today();}
+  else{pickChallenge();}
+}
+
+function pickChallenge(){
+  const list=ST.lang==='am'?CH_AM:CH_EN;
+  const c=list[Math.floor(Math.random()*list.length)];
+  ST.challenge=c;ST.challengeDate=today();ST.challengeDone=false;
+  LS.set('challenge',c);LS.set('challengeDate',today());
+}
+
+// ── Render Engine ────────────────────────────────────────────────
+function el(tag,attrs,children){
+  const e=document.createElement(tag);
+  if(attrs)Object.entries(attrs).forEach(([k,v])=>{
+    if(k==='style'&&typeof v==='object')Object.assign(e.style,v);
+    else if(k.startsWith('on'))e.addEventListener(k.slice(2).toLowerCase(),v);
+    else e.setAttribute(k,v);
+  });
+  if(children){
+    if(!Array.isArray(children))children=[children];
+    children.flat(Infinity).forEach(c=>{
+      if(c==null||c===false)return;
+      e.appendChild(typeof c==='string'?document.createTextNode(c):c);
+    });
+  }
+  return e;
+}
+function div(attrs,children){return el('div',attrs,children)}
+function btn(attrs,children){return el('button',attrs,children)}
+function span(attrs,children){return el('span',attrs,children)}
+function inp(attrs){return el('input',attrs)}
+function txt(attrs,children){return el('textarea',attrs,children)}
+
+const app=document.getElementById('app');
+function render(){
+  app.innerHTML='';
+  applyThemeBody();
+  const c=build();
+  if(Array.isArray(c))c.forEach(n=>app.appendChild(n));
+  else app.appendChild(c);
+}
+
+function applyThemeBody(){
+  document.body.style.background=T().BG;
+  document.documentElement.style.background=T().BG;
+}
+
+// ── Screens ──────────────────────────────────────────────────────
+function build(){
+  if(ST.screen==='splash')return buildSplash();
+  if(ST.screen==='pin')return buildPin();
+  return buildApp();
+}
+
+function buildSplash(){
+  const feats=ST.lang==='am'
+    ?[['🔥','Streak'],['🤖','AI Coach'],['🏆','ሽልማቶች'],['📈','ግራፎች'],['🔔','ማስታወሻ'],['🎨','9 Themes']]
+    :[['🔥','Streak'],['🤖','AI Coach'],['🏆','Awards'],['📈','Charts'],['🔔','Reminders'],['🎨','9 Themes']];
+  return div({style:{minHeight:'100vh',background:'#0D0D0D',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'space-between',padding:'60px 28px 40px',position:'relative',overflow:'hidden'}},[
+    div({style:{position:'absolute',top:'-80px',left:'50%',transform:'translateX(-50%)',width:'300px',height:'300px',background:'#E8C54718',borderRadius:'50%',filter:'blur(80px)',pointerEvents:'none'}}),
+    div({style:{display:'flex',flexDirection:'column',alignItems:'center',gap:'16px'}},[
+      div({style:{textAlign:'center'}},[
+        div({style:{fontSize:'64px',fontWeight:'900',color:'#E8C547',letterSpacing:'4px',textShadow:'0 0 60px #E8C54766',lineHeight:'1'}},L('appName')),
+        div({style:{fontSize:'13px',color:'#555',marginTop:'4px',letterSpacing:'2px'}},'LIMAD · ልማድ'),
+      ]),
+      div({style:{textAlign:'center',fontSize:'15px',color:'#888',maxWidth:'260px',lineHeight:'1.7',marginTop:'8px'}},[
+        L('tagline'),el('br'),
+        span({style:{color:'#E8C547',fontWeight:'600'}},L('tagSub')),
+      ]),
+      div({style:{display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center',marginTop:'12px',maxWidth:'320px'}},
+        feats.map(([ic,tx])=>div({style:{display:'flex',alignItems:'center',gap:'6px',padding:'6px 12px',borderRadius:'20px',background:'#141414',border:'1px solid #222',fontSize:'12px',color:'#999'}},[span({},ic),span({},tx)]))),
+    ]),
+    div({style:{width:'100%',maxWidth:'320px'}},[
+      btn({style:{width:'100%',padding:'18px 0',borderRadius:'20px',border:'none',background:'#E8C547',color:'#0D0D0D',fontSize:'17px',fontWeight:'800',letterSpacing:'.5px',boxShadow:'0 0 40px #E8C54744'},onclick(){
+        LS.set('seen',true);ST.screen='pin';render();
+      }},L('start')),
+      div({style:{textAlign:'center',color:'#333',fontSize:'11px',marginTop:'14px'}},L('pinHint')),
+    ]),
+  ]);
+}
+
+function buildPin(){
+  const t=T();
+  return div({style:{minHeight:'100vh',background:t.BG,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'28px'}},[
+    div({style:{fontSize:'44px',fontWeight:'900',color:t.AC,letterSpacing:'3px',textShadow:`0 0 40px ${t.AC}44`}},L('appName')),
+    div({style:{color:t.DM,fontSize:'13px'}},ST.hasPin?L('pinEnter'):L('pinNew')),
+    div({id:'pin-dots',style:{display:'flex',gap:'14px',animation:ST.pinErr?'shake .5s':''}},[
+      ...[0,1,2,3].map(i=>div({style:{width:'13px',height:'13px',borderRadius:'50%',background:ST.digits[i]!=null?(ST.pinErr?'#E84747':t.AC):'#222',transition:'background .15s',boxShadow:ST.digits[i]!=null&&!ST.pinErr?`0 0 8px ${t.AC}88`:'none'}})),
+    ]),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(3,66px)',gap:'10px'}},
+      [1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>btn({
+        style:{width:'66px',height:'66px',borderRadius:'16px',border:`1px solid ${t.BD}`,background:d===''?'transparent':t.CARD,color:t.TX,fontSize:'21px',fontWeight:'600'},
+        onclick(){
+          if(d==='⌫'){ST.digits=ST.digits.slice(0,-1);render();return;}
+          if(d==='')return;
+          const next=[...ST.digits,String(d)];
+          ST.digits=next;render();
+          if(next.length===4){
+            if(!ST.hasPin){LS.set('pin',next.join(''));ST.hasPin=true;goApp();}
+            else{
+              const saved=LS.get('pin');
+              if(saved===next.join('')){goApp();}
+              else{ST.pinErr=true;render();setTimeout(()=>{ST.digits=[];ST.pinErr=false;render();},700);}
+            }
+          }
+        }
+      },String(d)))
+    ),
+  ]);
+}
+
+function goApp(){
+  ST.digits=[];ST.pinErr=false;ST.screen='app';ST.tab='home';
+  if(!ST.addForm.cat)ST.addForm.cat=(ST.lang==='am'?CATS_AM:CATS_EN)[0];
+  render();
+  // reminder check
+  setInterval(()=>{
+    ST.habits.forEach(h=>{
+      if(!h.reminder)return;
+      const n=new Date();const[hh,mm]=h.reminder.split(':').map(Number);
+      if(n.getHours()===hh&&n.getMinutes()===mm&&n.getSeconds()<3){
+        if(Notification&&Notification.permission==='granted')new Notification(L('appName'),{body:h.name});
+      }
+    });
+  },2000);
+}
+
+function buildApp(){
+  const t=T();
+  const str=calcStreak();
+  const d=done();
+  const total=ST.habits.length;
+  const pct=total?Math.round((d.length/total)*100):0;
+  const{lvl,rem,need}=lvlInfo(ST.xp);
+
+  const tabs=[
+    ['home','🏠',L('today')],['calendar','📅',L('calendar')],['charts','📈',L('charts')],
+    ['ai','🤖',L('ai')],['awards','🏆',L('awards')],['add','＋',L('add')],
+    ['profile','👤',L('profile')],['settings','⚙️',L('settings')],
+  ];
+
+  return div({style:{background:t.BG,color:t.TX,minHeight:'100vh'}},[
+    // Flash
+    ST.flash?div({style:{position:'fixed',top:'72px',left:'50%',transform:'translateX(-50%)',background:t.AC,color:'#0D0D0D',padding:'7px 20px',borderRadius:'20px',fontWeight:'700',fontSize:'13px',zIndex:'999',animation:'fadeup .9s forwards',whiteSpace:'nowrap',pointerEvents:'none'}},ST.flash):null,
+    // Confetti
+    ST.confetti?buildConfetti():null,
+    // Header
+    div({style:{padding:'18px 18px 10px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${t.BD}`,background:t.BG,position:'sticky',top:'0',zIndex:'50'}},[
+      div({},[
+        div({style:{fontSize:'24px',fontWeight:'900',color:t.AC,letterSpacing:'2px'}},L('appName')),
+        div({style:{fontSize:'11px',color:t.DM,marginTop:'2px'}},`${(ST.lang==='am'?DAYS_AM:DAYS_EN)[new Date().getDay()]} · ${new Date().getDate()} ${(ST.lang==='am'?MONTHS_AM:MONTHS_EN)[new Date().getMonth()]}`),
+      ]),
+      div({style:{textAlign:'right'}},[
+        div({style:{fontSize:'11px',color:t.DM}},`${L('level')} ${lvl} · 🔥 ${str}`),
+        div({style:{fontSize:'17px',fontWeight:'800',color:t.AC}},`${ST.xp} XP`),
+        div({style:{width:'76px',height:'3px',background:t.MU,borderRadius:'2px',marginTop:'4px',marginLeft:'auto'}},[
+          div({style:{width:`${(rem/need)*100}%`,height:'100%',background:t.AC,borderRadius:'2px',transition:'width .4s'}}),
+        ]),
+      ]),
+    ]),
+    // Content
+    div({style:{padding:'12px 14px 0'}},[ buildTab() ]),
+    // Bottom Nav
+    div({style:{position:'fixed',bottom:'0',left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:'430px',background:t.CARD,borderTop:`1px solid ${t.BD}`,display:'flex',overflowX:'auto',padding:'6px 0 12px',zIndex:'100'}},
+      tabs.map(([tb,ico,lbl])=>btn({
+        style:{display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',background:'none',border:'none',padding:'4px 2px',flex:'1 0 auto',minWidth:'52px'},
+        onclick(){ST.tab=tb;if(tb==='add'&&!ST.addForm.cat)ST.addForm.cat=(ST.lang==='am'?CATS_AM:CATS_EN)[0];render();}
+      },[
+        div({style:{fontSize:ST.tab===tb?'20px':'16px',opacity:ST.tab===tb?'1':'.3',transition:'all .15s'}},ico),
+        div({style:{fontSize:'8.5px',color:ST.tab===tb?t.AC:t.DM,fontWeight:ST.tab===tb?'700':'400',whiteSpace:'nowrap'}},lbl),
+      ]))
+    ),
+  ]);
+}
+
+function buildConfetti(){
+  const colors=['#E8C547','#fff','#FFD700','#4ADE80','#A78BFA','#F472B6'];
+  return div({style:{position:'fixed',inset:'0',pointerEvents:'none',zIndex:'998',overflow:'hidden'}},
+    Array.from({length:28}).map((_,i)=>{
+      const left=Math.random()*100,delay=Math.random()*0.4,dur=1+Math.random()*1,size=5+Math.random()*6,color=colors[i%colors.length];
+      return div({style:{position:'absolute',top:'-20px',left:`${left}%`,width:`${size}px`,height:`${size*1.6}px`,background:color,opacity:'0.9',animation:`confettiFall ${dur}s ${delay}s ease-in forwards`,borderRadius:'2px'}});
+    })
+  );
+}
+
+function buildTab(){
+  const t=ST.tab;
+  if(t==='home')return buildHome();
+  if(t==='calendar')return buildCalendar();
+  if(t==='charts')return buildCharts();
+  if(t==='ai')return buildAI();
+  if(t==='awards')return buildAwards();
+  if(t==='add')return buildAdd();
+  if(t==='profile')return buildProfile();
+  if(t==='settings')return buildSettings();
+  return div({});
+}
+
+// ── HOME ─────────────────────────────────────────────────────────
+function buildHome(){
+  const t=T();
+  const d=done();
+  const total=ST.habits.length;
+  const pct=total?Math.round((d.length/total)*100):0;
+  const str=calcStreak();
+  const nodes=[];
+
+  // Daily challenge
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'16px',marginBottom:'12px',border:`1px solid ${t.BD}`}},[
+    div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}},[
+      div({style:{fontSize:'13px',fontWeight:'700'}},`🏅 ${L('challenge')}`),
+      ST.challengeDone?div({style:{fontSize:'11px',color:t.AC,fontWeight:'600'}},L('chDone')):null,
+    ]),
+    div({style:{fontSize:'14px',marginBottom:ST.challengeDone?0:'12px',textDecoration:ST.challengeDone?'line-through':'none',opacity:ST.challengeDone?.6:1}},ST.challenge),
+    !ST.challengeDone?btn({style:{width:'100%',padding:'9px',borderRadius:'12px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'12px'},onclick(){
+      ST.challengeDone=true;LS.set('challengeDoneDate',today());
+      ST.xp+=CH_XP;LS.set('xp',ST.xp);
+      showFlash(`+${CH_XP} XP 🏅`);
+      if(ST.soundOn)playDing();
+    }},ST.lang==='am'?'✓ ተጠናቀቀ':'✓ Mark complete'):null,
+  ]));
+
+  // Progress ring
+  const r=25,circ=2*Math.PI*r;
+  const ring=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  ring.setAttribute('width','66');ring.setAttribute('height','66');ring.style.transform='rotate(-90deg)';
+  const bg=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  bg.setAttribute('cx','33');bg.setAttribute('cy','33');bg.setAttribute('r',String(r));
+  bg.setAttribute('fill','none');bg.setAttribute('stroke',t.MU);bg.setAttribute('stroke-width','5');
+  const fg=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  fg.setAttribute('cx','33');fg.setAttribute('cy','33');fg.setAttribute('r',String(r));
+  fg.setAttribute('fill','none');fg.setAttribute('stroke',t.AC);fg.setAttribute('stroke-width','5');
+  fg.setAttribute('stroke-dasharray',String(circ));fg.setAttribute('stroke-dashoffset',String(circ*(1-pct/100)));
+  fg.setAttribute('stroke-linecap','round');fg.style.transition='stroke-dashoffset .5s';
+  ring.appendChild(bg);ring.appendChild(fg);
+  const ringWrap=div({style:{position:'relative',width:'66px',height:'66px',flexShrink:'0'}},[ring]);
+  const pctLbl=div({style:{position:'absolute',inset:'0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:'700',color:t.AC}},`${pct}%`);
+  ringWrap.appendChild(pctLbl);
+
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'16px',marginBottom:'12px',display:'flex',gap:'16px',alignItems:'center',border:`1px solid ${t.BD}`}},[
+    ringWrap,
+    div({},[
+      div({style:{fontSize:'15px',fontWeight:'700'}},`${d.length}/${total} ${L('done')}`),
+      div({style:{fontSize:'11px',color:t.DM,marginTop:'2px'}},L('doneToday')),
+      pct===100&&total>0?div({style:{fontSize:'12px',color:t.AC,marginTop:'5px',fontWeight:'600'}},L('perfect')):null,
+      str>0?div({style:{fontSize:'11px',color:'#F97316',marginTop:'4px'}},`🔥 ${str} ${L('streak')}`):null,
+    ]),
+  ]));
+
+  // Freeze day
+  nodes.push(div({style:{background:t.CARD,borderRadius:'14px',padding:'12px 14px',marginBottom:'12px',display:'flex',alignItems:'center',justifyContent:'space-between',border:`1px solid ${t.BD}`}},[
+    div({},[
+      div({style:{fontSize:'13px',fontWeight:'700'}},L('freeze')),
+      div({style:{fontSize:'10px',color:t.DM,marginTop:'2px'}},L('freezeDesc')),
+    ]),
+    btn({style:{padding:'7px 13px',borderRadius:'12px',border:`1px solid ${ST.freezeAvail>0?'#60A5FA':t.MU}`,background:'transparent',color:ST.freezeAvail>0?'#60A5FA':t.DM,fontSize:'11px',fontWeight:'600'},onclick(){
+      if(ST.freezeAvail<=0)return;
+      const y=new Date();y.setDate(y.getDate()-1);const yk=dk(y);
+      if(!ST.logs[yk]||!ST.logs[yk].length){
+        ST.freezeDates=[...ST.freezeDates,yk];LS.set('freezeDates',ST.freezeDates);
+        ST.freezeAvail=ST.freezeAvail-1;LS.set('freezeAvail',ST.freezeAvail);
+        showFlash('❄ Streak ተጠበቀ!');render();
+      }
+    }},ST.freezeAvail>0?L('useFreeze'):L('freezeUsed')),
+  ]));
+
+  // Habits
+  if(!ST.habits.length){
+    nodes.push(div({style:{textAlign:'center',padding:'40px 20px',color:t.DM}},[
+      div({style:{fontSize:'40px',marginBottom:'12px'}},'🌱'),
+      div({style:{fontSize:'15px',marginBottom:'8px'}},L('noHabits')),
+      btn({style:{padding:'10px 24px',borderRadius:'20px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'13px'},onclick(){ST.tab='add';render();}},L('addFirst')),
+    ]));
+  } else {
+    ST.habits.forEach(h=>{
+      const checked=d.includes(h.id);
+      nodes.push(div({style:{background:checked?t.AC+'12':t.CARD,border:`1px solid ${checked?t.AC+'44':t.BD}`,borderRadius:'16px',padding:'12px 14px',marginBottom:'9px',transition:'all .2s'}},[
+        div({style:{display:'flex',alignItems:'center',gap:'12px'}},[
+          btn({style:{width:'30px',height:'30px',borderRadius:'50%',border:`2px solid ${checked?t.AC:t.MU}`,background:checked?t.AC:'transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',color:'#0D0D0D',flexShrink:'0',transition:'all .15s'},onclick(){
+            const isDone=done().includes(h.id);
+            const nd=isDone?done().filter(x=>x!==h.id):[...done(),h.id];
+            ST.logs={...ST.logs,[today()]:nd};LS.set('logs',ST.logs);
+            const gain=isDone?-XP_PER:XP_PER;ST.xp=Math.max(0,ST.xp+gain);LS.set('xp',ST.xp);
+            const xl={...ST.xpLog};xl[today()]=(xl[today()]||0)+gain;ST.xpLog=xl;LS.set('xpLog',xl);
+            if(!isDone){
+              showFlash('+10 XP ⭐');
+              if(ST.soundOn)playDing();
+              if(nd.length===ST.habits.length&&ST.habits.length>0){
+                ST.confetti=true;setTimeout(()=>{ST.confetti=false;render();},2200);
+              }
+            }
+            render();
+          }},checked?'✓':''),
+          div({style:{flex:'1',minWidth:'0'}},[
+            div({style:{fontWeight:'600',fontSize:'14px',textDecoration:checked?'line-through':'none',opacity:checked?.65:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},h.name),
+            div({style:{fontSize:'11px',color:t.DM,marginTop:'2px',display:'flex',gap:'8px'}},[
+              span({},h.cat||''),
+              h.reminder?span({},`⏰ ${h.reminder}`):null,
+            ]),
+          ]),
+          btn({style:{background:'none',border:'none',color:t.MU,fontSize:'20px',padding:'0 4px',lineHeight:'1'},onclick(){
+            ST.habits=ST.habits.filter(x=>x.id!==h.id);LS.set('habits',ST.habits);render();
+          }},'×'),
+        ]),
+        h.notes?div({style:{fontSize:'11px',color:t.DM,marginTop:'8px',paddingTop:'8px',borderTop:`1px solid ${t.BD}`,lineHeight:'1.5'}},`📝 ${h.notes}`):null,
+      ]));
+    });
+  }
+  return div({},nodes);
+}
+
+// ── CALENDAR ──────────────────────────────────────────────────────
+function buildCalendar(){
+  const t=T();
+  const yr=ST.calYear,m=ST.calMonth;
+  const first=new Date(yr,m,1).getDay();
+  const days=new Date(yr,m+1,0).getDate();
+  const DS=ST.lang==='am'?DAYS_S_AM:DAYS_S_EN;
+  const MO=ST.lang==='am'?MONTHS_AM:MONTHS_EN;
+  const cells=[];
+  for(let i=0;i<first;i++)cells.push(div({style:{aspectRatio:'1'}}));
+  for(let d=1;d<=days;d++){
+    const k=`${yr}-${m+1}-${d}`;
+    const cnt=(ST.logs[k]||[]).length;
+    const pct=ST.habits.length?cnt/ST.habits.length:0;
+    const isToday=dk()===k;
+    const frozen=ST.freezeDates.includes(k);
+    cells.push(div({style:{aspectRatio:'1',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'7px',fontSize:'11px',fontWeight:isToday?'700':'400',background:frozen?'#60A5FA66':pct===1?t.AC:pct>0?t.AC+'44':t.SB,color:pct===1?'#0D0D0D':isToday?t.AC:t.TX,border:isToday?`2px solid ${t.AC}`:'2px solid transparent'}},frozen?'❄':String(d)));
+  }
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+    div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}},[
+      btn({style:{background:'none',border:'none',color:t.AC,fontSize:'22px',padding:'0 8px'},onclick(){
+        ST.calMonth--;if(ST.calMonth<0){ST.calMonth=11;ST.calYear--;}render();
+      }},'‹'),
+      div({style:{fontWeight:'700'}},`${MO[m]} ${yr}`),
+      btn({style:{background:'none',border:'none',color:t.AC,fontSize:'22px',padding:'0 8px'},onclick(){
+        ST.calMonth++;if(ST.calMonth>11){ST.calMonth=0;ST.calYear++;}render();
+      }},'›'),
+    ]),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px',marginBottom:'6px'}},DS.map(d=>div({style:{textAlign:'center',fontSize:'10px',color:t.DM,padding:'2px 0'}},d))),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px'}},cells),
+    div({style:{display:'flex',gap:'12px',marginTop:'12px',fontSize:'10px',color:t.DM}},[
+      span({},[div({style:{background:t.AC,borderRadius:'3px',width:'10px',height:'10px',display:'inline-block',marginRight:'4px',verticalAlign:'middle'}}),'ሙሉ']),
+      span({},[div({style:{background:t.AC+'44',borderRadius:'3px',width:'10px',height:'10px',display:'inline-block',marginRight:'4px',verticalAlign:'middle'}}),'ከፊል']),
+      span({},[div({style:{background:'#60A5FA66',borderRadius:'3px',width:'10px',height:'10px',display:'inline-block',marginRight:'4px',verticalAlign:'middle'}}),'❄ Freeze']),
+    ]),
+  ]);
+}
+
+// ── CHARTS ────────────────────────────────────────────────────────
+function buildCharts(){
+  const t=T();
+  const days=ST.chartRange==='weekly'?7:30;
+  const DS=ST.lang==='am'?DAYS_S_AM:DAYS_S_EN;
+  const data=Array.from({length:days}).map((_,i)=>{
+    const d=new Date();d.setDate(d.getDate()-(days-1-i));
+    const k=dk(d);
+    return{label:ST.chartRange==='weekly'?DS[d.getDay()]:String(d.getDate()),pct:ST.habits.length?Math.round(((ST.logs[k]||[]).length/ST.habits.length)*100):0,xp:ST.xpLog[k]||0};
+  });
+  const maxXp=Math.max(1,...data.map(d=>d.xp));
+
+  return div({},[
+    div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+      div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}},[
+        div({style:{fontSize:'14px',fontWeight:'700'}},`📈 ${L('charts')}`),
+        div({style:{display:'flex',gap:'6px',background:t.SB,borderRadius:'10px',padding:'3px'}},[
+          btn({style:{padding:'5px 12px',borderRadius:'8px',border:'none',fontSize:'11px',cursor:'pointer',background:ST.chartRange==='weekly'?t.AC:'transparent',color:ST.chartRange==='weekly'?'#0D0D0D':t.DM,fontWeight:'600'},onclick(){ST.chartRange='weekly';render();}},L('weekly')),
+          btn({style:{padding:'5px 12px',borderRadius:'8px',border:'none',fontSize:'11px',cursor:'pointer',background:ST.chartRange==='monthly'?t.AC:'transparent',color:ST.chartRange==='monthly'?'#0D0D0D':t.DM,fontWeight:'600'},onclick(){ST.chartRange='monthly';render();}},L('monthly')),
+        ]),
+      ]),
+      div({style:{fontSize:'12px',fontWeight:'600',marginBottom:'8px',color:t.DM}},L('completion')),
+      div({style:{display:'flex',gap:ST.chartRange==='weekly'?'5px':'2px',alignItems:'flex-end',height:'70px',marginBottom:'18px'}},
+        data.map(d=>div({style:{flex:'1',display:'flex',flexDirection:'column',alignItems:'center',gap:'3px'}},[
+          div({style:{width:'100%',height:`${Math.max(2,(d.pct/100)*64)}px`,background:d.pct===100?t.AC:d.pct>0?t.AC+'77':t.MU,borderRadius:'3px',transition:'height .3s'}}),
+          ST.chartRange==='weekly'?div({style:{fontSize:'9px',color:t.DM}},d.label):null,
+        ]))
+      ),
+      div({style:{fontSize:'12px',fontWeight:'600',marginBottom:'8px',color:t.DM}},L('xpChart')),
+      div({style:{display:'flex',gap:ST.chartRange==='weekly'?'5px':'2px',alignItems:'flex-end',height:'60px'}},
+        data.map(d=>div({style:{flex:'1',display:'flex',flexDirection:'column',alignItems:'center',gap:'3px'}},[
+          div({style:{width:'100%',height:`${Math.max(2,(d.xp/maxXp)*54)}px`,background:'#A78BFA88',borderRadius:'3px',transition:'height .3s'}}),
+          ST.chartRange==='weekly'?div({style:{fontSize:'9px',color:t.DM}},d.label):null,
+        ]))
+      ),
+    ]),
+    div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'14px'}},L('advStats')),
+      div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},[
+        ['✅',L('compRate'),`${compRate()}%`],
+        ['🔥',L('longStreak'),String(calcLongest())],
+        ['📅',L('bestMonth'),bestMonth()],
+        ['📈',L('totalDays'),String(Object.values(ST.logs).filter(a=>a&&a.length>0).length)],
+      ].map(([ic,lb,vl])=>div({style:{background:t.SB,borderRadius:'14px',padding:'14px'}},[
+        div({style:{fontSize:'22px'}},ic),
+        div({style:{fontSize:'17px',fontWeight:'700',color:t.AC,marginTop:'4px'}},vl),
+        div({style:{fontSize:'10px',color:t.DM}},lb),
+      ]))),
+    ]),
+  ]);
+}
+
+// ── AI COACH ─────────────────────────────────────────────────────
+function buildAI(){
+  const t=T();
+  const str=calcStreak();
+  if(!window._aiState)window._aiState={msg:'',loading:false,asked:false};
+  const ai=window._aiState;
+
+  async function ask(){
+    ai.loading=true;ai.asked=true;render();
+    try{
+      const sysP=ST.lang==='am'?'አንተ የልማድ አሠልጣኝ ነህ። አጭር፣ ጠንካራ፣ አበረታቺ መልዕክት በአማርኛ ስጥ። ከ3 ዓረፍተ ነገር አትበልጥ። emoji ተጠቀም።':'You are a habit coach. Give a short, strong, motivating message in English. Max 3 sentences. Use emoji.';
+      const uMsg=ST.lang==='am'?`ልማዶቼ: ${ST.habits.map(h=>h.name).join(', ')||'ምንም'}. ዛሬ: ${done().length}/${ST.habits.length}. ተከታታይ: ${str} ቀን. XP: ${ST.xp}. አበረታታኝ!`:`My habits: ${ST.habits.map(h=>h.name).join(', ')||'none'}. Today: ${done().length}/${ST.habits.length}. Streak: ${str} days. XP: ${ST.xp}. Motivate me!`;
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:300,system:sysP,messages:[{role:'user',content:uMsg}]})});
+      const data=await r.json();ai.msg=data.content?.[0]?.text||(ST.lang==='am'?'ዛሬም ተጋ! 💪':'Keep going! 💪');
+    }catch{ai.msg=ST.lang==='am'?'ዛሬም ተጋ! አንተ ታላቅ ነህ! 💪🔥':'Keep pushing — you\'ve got this! 💪🔥';}
+    ai.loading=false;render();
+  }
+
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'20px',marginBottom:'14px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`🤖 ${L('aiCoach')}`),
+    !ai.asked?btn({style:{width:'100%',padding:'13px',borderRadius:'14px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'14px'},onclick:ask},L('askCoach')):
+    ai.loading?div({style:{color:t.DM,textAlign:'center',padding:'12px',fontSize:'13px'}},`⏳ ${L('thinking')}`):
+    div({},[
+      div({style:{fontSize:'14px',lineHeight:'1.8',background:t.SB,padding:'14px',borderRadius:'14px',borderLeft:`3px solid ${t.AC}`}},ai.msg),
+      btn({style:{marginTop:'10px',padding:'6px 14px',borderRadius:'10px',border:`1px solid ${t.MU}`,background:'transparent',color:t.DM,fontSize:'12px'},onclick(){ai.asked=false;ai.msg='';render();}},L('askAgain')),
+    ]),
+    ST.lang==='am'?div({style:{fontSize:'10px',color:t.DM,marginTop:'12px',lineHeight:'1.5'}},'ማስታወሻ፦ AI Coach ኢንተርኔት ይፈልጋል (claude.ai API)። ቀሪዎቹ features ሙሉ offline ይሠራሉ።'):
+    div({style:{fontSize:'10px',color:t.DM,marginTop:'12px',lineHeight:'1.5'}},'Note: AI Coach requires internet (claude.ai API). All other features work fully offline.'),
+  ]);
+}
+
+// ── AWARDS ────────────────────────────────────────────────────────
+function buildAwards(){
+  const t=T();
+  const str=calcStreak();
+  const perf=ST.habits.length>0&&done().length===ST.habits.length;
+  const list=[
+    {icon:'🔥',name:ST.lang==='am'?'ሦስት ቀን':'3 Days',desc:ST.lang==='am'?'3 ቀን ተከታታይ':'3 day streak',ok:str>=3},
+    {icon:'⚡',name:ST.lang==='am'?'አንድ ሳምንት':'1 Week',desc:ST.lang==='am'?'7 ቀን ተከታታይ':'7 day streak',ok:str>=7},
+    {icon:'🌟',name:ST.lang==='am'?'ሦስት ሳምንት':'3 Weeks',desc:ST.lang==='am'?'21 ቀን ተከታታይ':'21 day streak',ok:str>=21},
+    {icon:'👑',name:ST.lang==='am'?'አንድ ወር':'1 Month',desc:ST.lang==='am'?'30 ቀን ተከታታይ':'30 day streak',ok:str>=30},
+    {icon:'🎯',name:ST.lang==='am'?'5 ልማዶች':'5 Habits',desc:ST.lang==='am'?'5 ልማዶች ጨምር':'Add 5 habits',ok:ST.habits.length>=5},
+    {icon:'💎',name:'500 XP',desc:ST.lang==='am'?'500 XP ክምችት':'Earn 500 XP',ok:ST.xp>=500},
+    {icon:'✨',name:ST.lang==='am'?'ፍጹም ቀን':'Perfect Day',desc:ST.lang==='am'?'ሁሉ ልማዶች ዛሬ':'All habits today',ok:perf},
+  ];
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'14px'}},`🏆 ${L('achievements')}`),
+    div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},
+      list.map(a=>div({style:{background:a.ok?t.AC+'18':t.SB,border:`1px solid ${a.ok?t.AC+'55':t.BD}`,borderRadius:'14px',padding:'12px 14px',opacity:a.ok?'1':'.4',transition:'all .2s'}},[
+        div({style:{fontSize:'26px',marginBottom:'4px'}},a.icon),
+        div({style:{fontSize:'12px',fontWeight:'700',color:a.ok?t.AC:t.TX}},a.name),
+        div({style:{fontSize:'10px',color:t.DM,marginTop:'2px'}},a.desc),
+        a.ok?div({style:{fontSize:'10px',color:t.AC,marginTop:'4px'}},L('unlocked')):null,
+      ])))
+  ]);
+}
+
+// ── ADD HABIT ─────────────────────────────────────────────────────
+function buildAdd(){
+  const t=T();
+  const CATS=ST.lang==='am'?CATS_AM:CATS_EN;
+  if(!ST.addForm.cat)ST.addForm.cat=CATS[0];
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'20px',border:`1px solid ${t.BD}`}},[
+    div({style:{fontSize:'16px',fontWeight:'700',marginBottom:'18px'}},L('newHabit')),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('name')),
+    inp({type:'text',value:ST.addForm.name,placeholder:L('namePH'),style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',marginBottom:'14px'},oninput(e){ST.addForm.name=e.target.value;}}),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'8px'}},L('cat')),
+    div({style:{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'14px'}},
+      CATS.map(c=>btn({style:{padding:'7px 13px',borderRadius:'20px',border:`1px solid ${ST.addForm.cat===c?t.AC:t.MU}`,background:ST.addForm.cat===c?t.AC+'22':'transparent',color:ST.addForm.cat===c?t.AC:t.DM,fontSize:'12px'},onclick(){ST.addForm.cat=c;render();}},c))
+    ),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('notes')),
+    txt({placeholder:L('notesPH'),rows:'2',style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none',resize:'none',marginBottom:'14px'},oninput(e){ST.addForm.notes=e.target.value;}},ST.addForm.notes||''),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('reminder')),
+    inp({type:'time',value:ST.addForm.reminder||'',style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',marginBottom:'18px',colorScheme:'dark'},oninput(e){ST.addForm.reminder=e.target.value;}}),
+    btn({style:{width:'100%',padding:'14px',borderRadius:'14px',border:'none',background:ST.addForm.name.trim()?t.AC:t.MU,color:'#0D0D0D',fontWeight:'700',fontSize:'15px'},onclick(){
+      if(!ST.addForm.name.trim())return;
+      const h={id:Date.now().toString(),name:ST.addForm.name.trim(),cat:ST.addForm.cat||(ST.lang==='am'?CATS_AM:CATS_EN)[0],notes:ST.addForm.notes||'',reminder:ST.addForm.reminder||''};
+      ST.habits=[...ST.habits,h];LS.set('habits',ST.habits);
+      if(h.reminder&&Notification&&Notification.permission!=='granted')Notification.requestPermission();
+      ST.addForm={name:'',cat:(ST.lang==='am'?CATS_AM:CATS_EN)[0],notes:'',reminder:''};
+      ST.tab='home';render();
+    }},L('save')),
+  ]);
+}
+
+// ── PROFILE ───────────────────────────────────────────────────────
+function buildProfile(){
+  const t=T();
+  const str=calcStreak();
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'20px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'16px'}},`👤 ${L('profileTitle')}`),
+    div({style:{display:'flex',justifyContent:'center',marginBottom:'12px'}},[
+      div({style:{width:'70px',height:'70px',borderRadius:'50%',background:t.SB,border:`2px solid ${t.AC}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'34px'}},(ST.profile.avatar||AVATARS[0])),
+    ]),
+    div({style:{fontSize:'11px',color:t.DM,marginBottom:'8px',textAlign:'center'}},L('avatarPick')),
+    div({style:{display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center',marginBottom:'16px'}},
+      AVATARS.map(a=>btn({style:{width:'36px',height:'36px',borderRadius:'50%',border:`2px solid ${(ST.profile.avatar||AVATARS[0])===a?t.AC:'transparent'}`,background:t.SB,fontSize:'18px'},onclick(){ST.profile={...ST.profile,avatar:a};LS.set('profile',ST.profile);render();}},a))
+    ),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('username')),
+    inp({type:'text',value:ST.profile.name||'',placeholder:ST.lang==='am'?'ስም...':'Name...',style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',marginBottom:'14px'},oninput(e){ST.profile={...ST.profile,name:e.target.value};}}),
+    btn({style:{width:'100%',padding:'13px',borderRadius:'14px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'14px',marginBottom:'16px'},onclick(){
+      if(!ST.profile.joinDate)ST.profile.joinDate=new Date().toISOString();
+      LS.set('profile',ST.profile);showFlash('✓ '+(ST.lang==='am'?'ተቀምጧል':'Saved'));
+    }},L('saveProfile')),
+    div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},[
+      ['⭐',L('totalXp'),String(ST.xp)],
+      ['🔥',L('bestStreak'),String(calcLongest())],
+      ['📅',L('joinDate'),ST.profile.joinDate?new Date(ST.profile.joinDate).toLocaleDateString():'—'],
+      ['✅',ST.lang==='am'?'ልማዶች':'Habits',String(ST.habits.length)],
+    ].map(([ic,lb,vl])=>div({style:{background:t.SB,borderRadius:'14px',padding:'14px'}},[
+      div({style:{fontSize:'20px'}},ic),
+      div({style:{fontSize:'16px',fontWeight:'700',color:t.AC,marginTop:'4px'}},vl),
+      div({style:{fontSize:'10px',color:t.DM}},lb),
+    ]))),
+  ]);
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────
+function buildSettings(){
+  const t=T();
+  const nodes=[];
+
+  // Language
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`🌍 ${L('lang')}`),
+    div({style:{display:'flex',gap:'10px'}},[
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${ST.lang==='am'?t.AC:t.MU}`,background:ST.lang==='am'?t.AC+'18':'transparent',color:ST.lang==='am'?t.AC:t.DM,fontWeight:'600',fontSize:'13px'},onclick(){ST.lang='am';LS.set('lang','am');pickChallenge();render();}},ST.lang==='am'?'🇪🇹 አማርኛ ✓':'🇪🇹 አማርኛ'),
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${ST.lang==='en'?t.AC:t.MU}`,background:ST.lang==='en'?t.AC+'18':'transparent',color:ST.lang==='en'?t.AC:t.DM,fontWeight:'600',fontSize:'13px'},onclick(){ST.lang='en';LS.set('lang','en');pickChallenge();render();}},ST.lang==='en'?'🇺🇸 English ✓':'🇺🇸 English'),
+    ]),
+  ]));
+
+  // Theme
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`🎨 ${L('themeChoose')}`),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px'}},
+      Object.entries(THEMES).map(([k,th])=>btn({title:th.n,style:{aspectRatio:'1',borderRadius:'14px',border:`2px solid ${ST.theme===k?th.AC:'transparent'}`,background:th.BG,display:'flex',alignItems:'center',justifyContent:'center'},onclick(){ST.theme=k;LS.set('theme',k);render();}},
+        div({style:{width:'16px',height:'16px',borderRadius:'50%',background:th.AC,boxShadow:`0 0 10px ${th.AC}88`}})))
+    ),
+  ]));
+
+  // Sound
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px',display:'flex',justifyContent:'space-between',alignItems:'center'}},[
+    div({style:{fontSize:'14px',fontWeight:'700'}},`🎵 ${L('sound')}`),
+    btn({style:{width:'46px',height:'26px',borderRadius:'13px',border:'none',background:ST.soundOn?t.AC:t.MU,position:'relative',transition:'background .2s'},onclick(){
+      ST.soundOn=!ST.soundOn;LS.set('soundOn',ST.soundOn);render();
+    }},[div({style:{width:'20px',height:'20px',borderRadius:'50%',background:'#0D0D0D',position:'absolute',top:'3px',left:ST.soundOn?'23px':'3px',transition:'left .2s'}})]),
+  ]));
+
+  // Notifications
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'10px'}},'🔔 '+L('reminder')),
+    btn({style:{width:'100%',padding:'11px',borderRadius:'12px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'13px'},onclick(){
+      if(Notification&&Notification.permission!=='granted')Notification.requestPermission().then(()=>render());
+    }},Notification&&Notification.permission==='granted'?L('notifOn'):L('notifBtn')),
+  ]));
+
+  // Export / Import
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`☁️ ${L('dataManage')}`),
+    div({style:{display:'flex',gap:'10px'}},[
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'13px'},onclick(){
+        const blob=new Blob([JSON.stringify({habits:ST.habits,logs:ST.logs,xp:ST.xp,profile:ST.profile,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+        const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='limad-backup.json';a.click();
+      }},L('export')),
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${t.MU}`,background:'transparent',color:t.TX,fontWeight:'600',fontSize:'13px'},onclick(){
+        const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+        inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.habits){ST.habits=d.habits;LS.set('habits',d.habits);}if(d.logs){ST.logs=d.logs;LS.set('logs',d.logs);}if(d.xp!=null){ST.xp=d.xp;LS.set('xp',d.xp);}if(d.profile){ST.profile=d.profile;LS.set('profile',d.profile);}render();}catch{}};r.readAsText(f);};inp.click();
+      }},L('import')),
+    ]),
+    div({style:{fontSize:'10px',color:t.DM,marginTop:'10px',lineHeight:'1.5'}},ST.lang==='am'?'ዳታ phone ላይ localStorage ውስጥ ይቀማጣል። Export ሲያደርጉ JSON ፋይል ያወርዳሉ።':'Data is saved in your phone\'s localStorage. Export creates a JSON backup file.'),
+  ]));
+
+  // Home / Reset PIN
+  nodes.push(div({style:{display:'flex',gap:'10px',marginBottom:'20px'}},[
+    btn({style:{flex:'1',padding:'10px 0',borderRadius:'12px',border:`1px solid ${t.MU}`,background:'transparent',color:t.DM,fontSize:'12px'},onclick(){ST.screen='splash';render();}},L('homeBtn')),
+    btn({style:{flex:'1',padding:'10px 0',borderRadius:'12px',border:'1px solid #E84747',background:'transparent',color:'#E84747',fontSize:'12px'},onclick(){LS.set('pin',null);ST.hasPin=false;ST.screen='pin';ST.digits=[];render();}},L('resetPin')),
+  ]));
+
+  return div({},nodes);
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+const seen=LS.get('seen');
+loadState();
+if(!seen){ST.screen='splash';}
+else{ST.screen='pin';}
+render();
+</script>
+</body>
+</html>
