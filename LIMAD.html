@@ -1,0 +1,1958 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+<meta name="apple-mobile-web-app-title" content="ልማድ"/>
+<meta name="theme-color" content="#0D0D0D"/>
+<title>ልማድ</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#0D0D0D;font-family:'Segoe UI',Helvetica,Arial,sans-serif;overflow-x:hidden}
+#app{max-width:430px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:80px}
+button{cursor:pointer;font-family:inherit}
+input,textarea,select{font-family:inherit}
+::-webkit-scrollbar{display:none}
+input[type=time]::-webkit-calendar-picker-indicator{filter:invert(1)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeup{0%{opacity:1;transform:translateX(-50%) translateY(0)}100%{opacity:0;transform:translateX(-50%) translateY(-24px)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+@keyframes confettiFall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(110vh) rotate(540deg);opacity:0}}
+@keyframes popIn{0%{transform:scale(.8);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes fadeInUp{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes ringPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.page{display:none}.page.active{display:block}
+.tab-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;padding:4px 2px;flex:1 0 auto;min-width:52px}
+.tab-ico{font-size:18px;transition:font-size .15s}
+.tab-lbl{font-size:8.5px;white-space:nowrap;transition:color .15s}
+.lm-tabcontent{animation:fadeInUp .28s ease both}
+.lm-card{transition:transform .15s ease, box-shadow .15s ease}
+button{transition:transform .1s ease}
+button:active{transform:scale(.96)}
+.lm-glass{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.lm-dynbg{position:fixed;inset:0;z-index:0;pointer-events:none;animation:bgDrift 18s ease-in-out infinite alternate}
+@keyframes bgDrift{0%{opacity:.6;transform:scale(1)}100%{opacity:1;transform:scale(1.08)}}
+.lm-particle{position:fixed;border-radius:50%;pointer-events:none;z-index:0;animation:particleFloat linear infinite}
+@keyframes particleFloat{0%{transform:translateY(0) translateX(0);opacity:0}10%{opacity:.5}90%{opacity:.4}100%{transform:translateY(-110vh) translateX(20px);opacity:0}}
+.lm-sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;animation:fadeInUp .2s ease}
+.lm-sheet{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;border-radius:22px 22px 0 0;z-index:201;animation:sheetUp .25s cubic-bezier(.2,.8,.3,1)}
+@keyframes sheetUp{0%{transform:translate(-50%,100%)}100%{transform:translate(-50%,0)}}
+.lm-skeleton{background:linear-gradient(90deg,rgba(255,255,255,.06) 25%,rgba(255,255,255,.14) 37%,rgba(255,255,255,.06) 63%);background-size:400% 100%;animation:shimmer 1.4s ease infinite;border-radius:10px}
+@keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.lm-ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.35);transform:scale(0);animation:rippleAnim .5s ease-out;pointer-events:none}
+@keyframes rippleAnim{to{transform:scale(3);opacity:0}}
+.lm-bar{transition:height .6s cubic-bezier(.2,.8,.2,1),width .6s cubic-bezier(.2,.8,.2,1)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ── Service Worker (Offline Cache) ───────────────────────────────
+if ('serviceWorker' in navigator) {
+  const swCode = `
+const CACHE = 'limad-v1';
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll([self.location.pathname]))
+  );
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => {
+    const clone = res.clone();
+    caches.open(CACHE).then(c => c.put(e.request, clone));
+    return res;
+  }).catch(() => caches.match(e.request))));
+});
+`;
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, {scope: './'})
+    .then(() => console.log('SW registered'))
+    .catch(e => console.log('SW failed (blob SW needs HTTPS):', e));
+}
+
+// ── Storage (localStorage) ───────────────────────────────────────
+const LS = {
+  get(k){try{const v=localStorage.getItem('lm:'+k);return v!=null?JSON.parse(v):null}catch{return null}},
+  set(k,v){try{localStorage.setItem('lm:'+k,JSON.stringify(v))}catch{}}
+};
+
+// ── Constants ────────────────────────────────────────────────────
+const DAYS_AM=['እሑድ','ሰኞ','ማክሰኞ','ረቡዕ','ሐሙስ','ዓርብ','ቅዳሜ'];
+const DAYS_EN=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const DAYS_S_AM=['እሑ','ሰኞ','ማክ','ረቡ','ሐሙ','ዓር','ቅዳ'];
+const DAYS_S_EN=['Su','Mo','Tu','We','Th','Fr','Sa'];
+const MONTHS_AM=['ጃኑ','ፌብ','ማርች','ኤፕ','ሜይ','ጁን','ጁላ','ኦገ','ሴፕ','ኦክ','ኖቬ','ዲሴ'];
+const MONTHS_EN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const CATS_AM=['💪 ጤና','📖 ትምህርት','🙏 መንፈስ','💧 ራስ እንክብካቤ','🎯 ምርታማነት'];
+const CATS_EN=['💪 Health','📖 Learning','🙏 Spirit','💧 Self-care','🎯 Productivity'];
+const AVATARS=['🧑','👩','🧔','👨‍🎓','👩‍🎓','🧑‍💼','👩‍💼','🧑‍🚀','🦁','🐯','🦅','🐉'];
+const CH_AM=['ዛሬ 2 ሊትር ውሃ ጠጣ','30 ደቂቃ አንብብ','10 ደቂቃ ተራመድ','5 ደቂቃ ጸልይ/ተነፍስ','ምንም ስኳር አትብላ','15 ደቂቃ ስፖርት ስራ','አንድ ሰው እርዳ','ምስጋና ጻፍ','1 ሊትር ውሃ ጠጣ ጠዋት','10 ደቂቃ አንብብ'];
+const CH_EN=['Drink 2L of water','Read for 30 minutes','Walk for 10 minutes','Meditate for 5 minutes','No sugar today','Exercise 15 minutes','Help someone today','Write gratitude','Drink 1L water in morning','Read for 10 minutes'];
+
+const THEMES={
+  dark:  {n:'Dark',  BG:'#0D0D0D',CARD:'#141414',AC:'#E8C547',MU:'#2A2A2A',TX:'#E8E8E8',DM:'#555',SB:'#1A1A1A',BD:'#1E1E1E'},
+  green: {n:'Green', BG:'#050F0A',CARD:'#0D1F15',AC:'#4ADE80',MU:'#1A3A25',TX:'#E8F5EE',DM:'#4A7A5A',SB:'#0A1A10',BD:'#1A3020'},
+  purple:{n:'Purple',BG:'#0A080F',CARD:'#130F1E',AC:'#A78BFA',MU:'#2A2040',TX:'#EDE8F5',DM:'#6A5A8A',SB:'#100D18',BD:'#1E1830'},
+  blue:  {n:'Blue',  BG:'#080C14',CARD:'#0F1624',AC:'#60A5FA',MU:'#1A2A40',TX:'#E8EFFE',DM:'#4A6A8A',SB:'#0C1220',BD:'#162030'},
+  amoled:{n:'AMOLED',BG:'#000000',CARD:'#0A0A0A',AC:'#FFFFFF',MU:'#222',   TX:'#FFFFFF',DM:'#666',   SB:'#050505',BD:'#181818'},
+  gold:  {n:'Gold',  BG:'#0F0A02',CARD:'#1A1206',AC:'#FFD700',MU:'#332608',TX:'#FFF8E8',DM:'#8A7440',SB:'#140E04',BD:'#2A1F08'},
+  red:   {n:'Red',   BG:'#0F0303',CARD:'#1F0A0A',AC:'#EF4444',MU:'#3A1414',TX:'#FCE8E8',DM:'#8A5050',SB:'#150505',BD:'#2A1010'},
+  orange:{n:'Orange',BG:'#0F0701',CARD:'#1F1206',AC:'#FB923C',MU:'#3A2410',TX:'#FCEEE0',DM:'#8A6840',SB:'#150A02',BD:'#2A1A08'},
+  pink:  {n:'Pink',  BG:'#0F0509',CARD:'#1F0D17',AC:'#F472B6',MU:'#3A1828',TX:'#FCE8F2',DM:'#8A5070',SB:'#150810',BD:'#2A1220'},
+};
+
+const XP_PER=10, CH_XP=25;
+const COIN_PER=5, PERFECT_DAY_COINS=15, MYSTERY_BOX_COST=25;
+const DIFF_XP={easy:5,medium:10,hard:18};
+const DIFF_COIN={easy:3,medium:5,hard:9};
+const THEME_COST={dark:0,amoled:0,green:40,purple:40,blue:40,gold:60,red:40,orange:40,pink:40};
+const PREMIUM_AVATARS=[['🦄',35],['🐲',35],['🧙',30],['🥷',30],['👽',30],['🤖',25],['🦸',40],['🧛',40]];
+
+const HABIT_TEMPLATES={
+  morning:{icon:'🌅',n:{am:'የጠዋት ልማድ',en:'Morning Routine'},items:{
+    am:['ውሃ ጠጣ (1 ብርጭቆ)','አልጋ አንጥፍ','5 ደቂቃ ማሰላሰል/ጸሎት','ትንሽ ጭረት (stretch)'],
+    en:['Drink a glass of water','Make your bed','5-min meditation/prayer','Light stretching']}},
+  student:{icon:'🎓',n:{am:'የተማሪ ልማድ',en:'Student Routine'},items:{
+    am:['30 ደቂቃ ማጥናት','ማስታወሻ መከለስ','አንድ ምዕራፍ ማንበብ','የነገ ትምህርት ማዘጋጀት'],
+    en:['Study for 30 minutes','Review notes','Read one chapter','Prepare for tomorrow\'s class']}},
+  gym:{icon:'🏋️',n:{am:'የጂም ልማድ',en:'Gym Routine'},items:{
+    am:['ማሞቂያ (Warm-up)','የአካል ብቃት እንቅስቃሴ','ውሃ መጠጣት','ጭረት (Stretch) ማድረግ'],
+    en:['Warm-up','Workout session','Drink water','Stretch / cool-down']}},
+  bible:{icon:'📖',n:{am:'የመጽሐፍ ቅዱስ ልማድ',en:'Bible Routine'},items:{
+    am:['ምዕራፍ ማንበብ','ጸሎት ማድረግ','ምስጋና መጻፍ'],
+    en:['Read a chapter','Pray','Write a gratitude note']}},
+  quran:{icon:'🕌',n:{am:'የቁርአን ልማድ',en:'Quran Routine'},items:{
+    am:['ቁርአን ማንበብ','ሶላት መስገድ','ዚክር ማድረግ'],
+    en:['Read Quran','Perform prayer','Dhikr / reflection']}},
+  productivity:{icon:'🎯',n:{am:'የምርታማነት ልማድ',en:'Productivity Routine'},items:{
+    am:['የዕለቱ ተግባር ዝርዝር (To-do)','2 ሰዓት ጥልቅ ስራ','Inbox ማጽዳት','የቀኑ ግምገማ'],
+    en:['Daily to-do list','2-hour deep work block','Clear inbox','End-of-day review']}},
+};
+function addTemplate(key){
+  const tpl=HABIT_TEMPLATES[key];if(!tpl)return;
+  const names=tpl.items[ST.lang]||tpl.items.en;
+  const existing=new Set(ST.habits.map(h=>h.name));
+  const cat=(ST.lang==='am'?CATS_AM:CATS_EN)[0];
+  const added=[];
+  names.forEach(n=>{
+    if(existing.has(n))return;
+    added.push({id:Date.now().toString()+Math.random().toString(36).slice(2,6),name:n,cat,notes:'',reminder:'',schedule:{type:'daily'},createdAt:new Date().toISOString()});
+  });
+  if(added.length){ST.habits=[...ST.habits,...added];LS.set('habits',ST.habits);}
+  haptic(15);
+  showFlash(added.length?`✓ ${added.length} ${ST.lang==='am'?'ልማዶች ተጨምረዋል':'habits added'}`:(ST.lang==='am'?'ቀድሞ ተጨምረዋል':'Already added'));
+  ST.tab='home';render();
+}
+
+// ── State ────────────────────────────────────────────────────────
+let ST={
+  screen:'splash', // splash|pin|app
+  tab:'home',
+  lang:'am',
+  theme:'dark',
+  hasPin:false,
+  habits:[],
+  logs:{},      // {dateKey: [habitId,...]}
+  xpLog:{},     // {dateKey: xp earned}
+  xp:0,
+  profile:{},
+  freezeDates:[],
+  freezeAvail:1,
+  challenge:'',
+  challengeDate:'',
+  challengeDone:false,
+  soundOn:true,
+  digits:[],
+  pinErr:false,
+  addForm:{name:'',cat:'',notes:'',reminder:'',schedule:{type:'daily',x:2},difficulty:'medium'},
+  showTodayOnly:false,
+  goals:{weekly:0,monthly:0,yearly:0},
+  online:typeof navigator!=='undefined'?navigator.onLine:true,
+  aiEndpoint:'',
+  editNoteId:null,
+  calMonth:new Date().getMonth(),
+  calYear:new Date().getFullYear(),
+  chartRange:'weekly',
+  confetti:false,
+  flash:null,
+  focus:{running:false,mode:'work',workMin:25,breakMin:5,remaining:25*60,sessionsToday:0,totalSessions:0},
+  focusLog:{}, // {dateKey: sessionsCompleted}
+};
+
+function dk(d=new Date()){return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`}
+function today(){return dk()}
+function done(){return ST.logs[today()]||[]}
+
+function T(){return THEMES[ST.theme]}
+function L(key){
+  const t=ST.lang;
+  const TXT={
+    appName:{am:'ልማድ',en:'LIMAD'},
+    tagline:{am:'ቀን ተከታታይ ልማዶችን ግንባ',en:'Build consistent daily habits'},
+    tagSub:{am:'ትናንሽ ርምጃዎች ትልቅ ለውጥ ያመጣሉ',en:'Small steps lead to big change'},
+    start:{am:'ጀምር →',en:'Get Started →'},
+    pinHint:{am:'PIN lock · Offline · ሙሉ ዳታ ተጠብቆ ይቀራል',en:'PIN lock · Fully offline · Data persists'},
+    pinEnter:{am:'PIN አስገቡ',en:'Enter PIN'},
+    pinNew:{am:'አዲስ PIN ምረጡ (4 ቁጥሮች)',en:'Choose new PIN (4 digits)'},
+    today:{am:'ዛሬ',en:'Today'},
+    calendar:{am:'ቀን',en:'Cal'},
+    charts:{am:'ግራፍ',en:'Charts'},
+    ai:{am:'AI',en:'AI'},
+    awards:{am:'ሽልማት',en:'Awards'},
+    add:{am:'＋',en:'＋'},
+    profile:{am:'መለያ',en:'Profile'},
+    settings:{am:'ቅንብር',en:'Settings'},
+    level:{am:'ደረጃ',en:'Level'},
+    streak:{am:'ተከታታይ',en:'Streak'},
+    done:{am:'ተጠናቀቀ',en:'Done'},
+    doneToday:{am:'ዛሬ ተጠናቅቀዋል',en:'completed today'},
+    perfect:{am:'✨ ፍጹም ቀን!',en:'✨ Perfect day!'},
+    noHabits:{am:'ልማዶች አልተጨመሩም',en:'No habits yet'},
+    addFirst:{am:'+ አዲስ ልማድ ጨምር',en:'+ Add your first habit'},
+    newHabit:{am:'አዲስ ልማድ',en:'New Habit'},
+    name:{am:'ስም',en:'Name'},
+    namePH:{am:'ለምሳሌ፦ ውሃ ጠጣ',en:'e.g. Drink water'},
+    cat:{am:'ምድብ',en:'Category'},
+    notes:{am:'ማስታወሻ',en:'Notes'},
+    notesPH:{am:'ስለዚህ ልማድ ማስታወሻ...',en:'Notes about this habit...'},
+    reminder:{am:'ማስታወሻ ሰዓት',en:'Reminder time'},
+    save:{am:'ጨምር ✓',en:'Add ✓'},
+    challenge:{am:'የዕለቱ ተግባር',en:'Daily Challenge'},
+    chDone:{am:'ተጠናቀቀ! +25 XP',en:'Done! +25 XP'},
+    freeze:{am:'🧊 Freeze Day',en:'🧊 Freeze Day'},
+    freezeDesc:{am:'አንድ ቀን ቢያመልጥ streak ይጠብቃል',en:'Protects streak if you miss a day'},
+    useFreeze:{am:'Freeze ተጠቀም',en:'Use Freeze'},
+    freezeUsed:{am:'ጥቅም ላይ ውሏል',en:'Used'},
+    aiCoach:{am:'AI አሠልጣኝ',en:'AI Coach'},
+    askCoach:{am:'አሠልጣኙን ጠይቅ',en:'Ask the coach'},
+    thinking:{am:'እያሰበ ነው...',en:'Thinking...'},
+    askAgain:{am:'ዳግም ጠይቅ',en:'Ask again'},
+    achievements:{am:'ሽልማቶች',en:'Achievements'},
+    unlocked:{am:'✓ ተሸልሟል',en:'✓ Unlocked'},
+    themeChoose:{am:'ቀለም ምረጥ',en:'Choose theme'},
+    dataManage:{am:'ዳታ አስተዳደር',en:'Data Management'},
+    export:{am:'📥 ላክ',en:'📥 Export'},
+    import:{am:'📂 አምጣ',en:'📂 Import'},
+    advStats:{am:'ስታቲስቲክስ',en:'Statistics'},
+    compRate:{am:'የማጠናቀቅ መጠን',en:'Completion rate'},
+    longStreak:{am:'ረዘም ያለ streak',en:'Longest streak'},
+    bestMonth:{am:'ምርጥ ወር',en:'Best month'},
+    totalDays:{am:'ጠቅላላ ቀናት',en:'Total days'},
+    profileTitle:{am:'መለያ',en:'Profile'},
+    username:{am:'ስም',en:'Username'},
+    totalXp:{am:'ጠቅላላ XP',en:'Total XP'},
+    bestStreak:{am:'ምርጥ streak',en:'Best streak'},
+    joinDate:{am:'የተቀላቀለበት ቀን',en:'Join date'},
+    saveProfile:{am:'አስቀምጥ',en:'Save'},
+    avatarPick:{am:'Avatar ምረጥ',en:'Pick avatar'},
+    lang:{am:'ቋንቋ',en:'Language'},
+    sound:{am:'ድምጽ',en:'Sound'},
+    weekly:{am:'ሳምንታዊ',en:'Weekly'},
+    monthly:{am:'ወራዊ',en:'Monthly'},
+    completion:{am:'የማጠናቀቅ %',en:'Completion %'},
+    xpChart:{am:'XP',en:'XP'},
+    homeBtn:{am:'🏠 Home',en:'🏠 Home'},
+    resetPin:{am:'🔒 PIN ዳግም ጀምር',en:'🔒 Reset PIN'},
+    notifBtn:{am:'🔔 ማስታወቂያ ፍቀድ',en:'🔔 Allow Notifications'},
+    notifOn:{am:'✓ ማስታወቂያ ነቅቷል',en:'✓ Notifications enabled'},
+    schedule:{am:'የልማድ መርሐግብር',en:'Habit Schedule'},
+    schDaily:{am:'ዕለታዊ',en:'Daily'},
+    schWeekdays:{am:'የስራ ቀናት',en:'Weekdays'},
+    schWeekends:{am:'ቅዳሜ እሁድ',en:'Weekends'},
+    schEveryX:{am:'በየX ቀን',en:'Every X days'},
+    todayOnly:{am:'ዛሬ ብቻ',en:'Today only'},
+    showAll:{am:'ሁሉንም',en:'All'},
+    heatTitle:{am:'🔥 የ12 ሳምንት ካርታ',en:'🔥 12-Week Heatmap'},
+    heatLess:{am:'ያነሰ',en:'Less'},
+    heatMore:{am:'የበለጠ',en:'More'},
+    pdfReport:{am:'📄 PDF ሪፖርት',en:'📄 PDF Report'},
+    pdfGen:{am:'⏳ እየተዘጋጀ...',en:'⏳ Generating...'},
+    pdfDone:{am:'✓ ወርዷል',en:'✓ Downloaded'},
+    goals:{am:'ግቦች',en:'Goals'},
+    goalsTitle:{am:'🎯 የግብ ዳሽቦርድ',en:'🎯 Goals Dashboard'},
+    weeklyGoal:{am:'ሳምንታዊ ግብ',en:'Weekly Goal'},
+    monthlyGoal:{am:'ወራዊ ግብ',en:'Monthly Goal'},
+    yearlyGoal:{am:'ዓመታዊ ግብ',en:'Yearly Goal'},
+    setTarget:{am:'ግብ አስቀምጥ',en:'Set target'},
+    completions:{am:'ማጠናቀቂያዎች',en:'completions'},
+    goalSaved:{am:'✓ ግብ ተቀምጧል',en:'✓ Goal saved'},
+    goalHint:{am:'ግብ = በዚህ ጊዜ ውስጥ ማጠናቀቅ የምትፈልገው የልማድ ብዛት',en:'Target = number of habit check-ins you want in this period'},
+    offlineBanner:{am:'📡 ከመስመር ውጭ ሁነታ · ውሂብ በስልክ ላይ ተቀምጧል',en:'📡 Offline mode · data saved on device'},
+    offlineAiNote:{am:'ከመስመር ውጭ ስለሆንክ የአካባቢ አሠልጣኝ (local coach) እየተጠቀምክ ነው። ኢንተርኔት ሲኖር ሙሉ AI ይሠራል።',en:'You\'re offline, so a local coach is replying. Full AI works once online.'},
+    pdfOfflineNote:{am:'PDF ማመንጫው ለመጀመሪያ ጊዜ ኢንተርኔት ይፈልጋል (ከዚያ በኋላ ያለ ኢንተርኔት ሊሠራ ይችላል)።',en:'PDF generation needs internet the first time (may work offline afterward once cached).'},
+    focus:{am:'ትኩረት',en:'Focus'},
+    focusTitle:{am:'⏱️ የትኩረት ሰዓት (Pomodoro)',en:'⏱️ Focus Timer (Pomodoro)'},
+    focusWork:{am:'ስራ',en:'Work'},
+    focusBreak:{am:'እረፍት',en:'Break'},
+    focusStart:{am:'ጀምር',en:'Start'},
+    focusPause:{am:'አቁም',en:'Pause'},
+    focusReset:{am:'ዳግም አስጀምር',en:'Reset'},
+    focusToday:{am:'ዛሬ',en:'Today'},
+    focusTotal:{am:'ጠቅላላ',en:'Total'},
+    focusSessions:{am:'ክፍለ ጊዜዎች',en:'Sessions'},
+    focusWorkLen:{am:'የስራ ደቂቃ',en:'Work minutes'},
+    focusBreakLen:{am:'የእረፍት ደቂቃ',en:'Break minutes'},
+    focusDone:{am:'✓ ክፍለ ጊዜ ተጠናቀቀ! +15 XP',en:'✓ Session complete! +15 XP'},
+    focusBreakOver:{am:'እረፍት አልቋል — ወደ ስራ ተመለስ',en:'Break over — back to work'},
+    insights:{am:'📊 ትንታኔ',en:'📊 Insights'},
+    bestDay:{am:'ምርጥ ቀን',en:'Best day'},
+    currentStreak:{am:'የአሁኑ streak',en:'Current streak'},
+    yearly:{am:'ዓመታዊ',en:'Yearly'},
+    aiInsight:{am:'🤖 ትንታኔ',en:'🤖 AI Insight'},
+    genderLabel:{am:'ጾታ',en:'Gender'},
+    genderMale:{am:'ወንድ',en:'Male'},
+    genderFemale:{am:'ሴት',en:'Female'},
+    rewards:{am:'ሽልማት',en:'Rewards'},
+    more:{am:'ተጨማሪ',en:'More'},
+    difficulty:{am:'🎯 የልማድ ችግር ደረጃ',en:'🎯 Habit Difficulty'},
+    diffEasy:{am:'ቀላል',en:'Easy'},
+    diffMedium:{am:'መካከለኛ',en:'Medium'},
+    diffHard:{am:'ከባድ',en:'Hard'},
+    coins:{am:'ኮይኖች',en:'Coins'},
+    dailyReward:{am:'🎁 የዕለት ሽልማት',en:'🎁 Daily Reward'},
+    claimReward:{am:'ተቀበል',en:'Claim'},
+    claimed:{am:'✓ ተቀብለሃል',en:'✓ Claimed'},
+    comeBackTomorrow:{am:'ነገ ተመለስ',en:'Come back tomorrow'},
+    mysteryBox:{am:'🎲 Mystery Box',en:'🎲 Mystery Box'},
+    openBox:{am:'ክፈት',en:'Open'},
+    notEnoughCoins:{am:'በቂ ኮይን የለህም',en:'Not enough coins'},
+    youWon:{am:'አገኘህ',en:'You won'},
+    shopThemes:{am:'🎨 ገጽታዎች ክፈት',en:'🎨 Unlock Themes'},
+    shopAvatars:{am:'👤 ልዩ Avatar ክፈት',en:'👤 Unlock Avatars'},
+    unlock:{am:'ክፈት',en:'Unlock'},
+    unlocked2:{am:'✓ ተከፍቷል',en:'✓ Unlocked'},
+    badges:{am:'🏅 ባጆች',en:'🏅 Badges'},
+    claimBadge:{am:'ኮይን ተቀበል',en:'Claim coins'},
+    aiDaily:{am:'የዕለት ምክር',en:'Daily Advice'},
+    aiWeekly:{am:'ሳምንታዊ ሪፖርት',en:'Weekly Report'},
+    aiPredict:{am:'Habit ትንበያ',en:'Habit Prediction'},
+    aiGoalPlan:{am:'የግብ አቀናባሪ',en:'Goal Planner'},
+    aiSchedule:{am:'የጊዜ ማቀናበሪያ',en:'Schedule Optimizer'},
+    aiTimePlan:{am:'የቀን መርሃ ግብር',en:'Time Planner'},
+    aiRecovery:{am:'Streak መልሶ ማግኛ',en:'Streak Recovery'},
+    aiChallenge:{am:'ፈተና አመንጪ',en:'Challenge Generator'},
+    aiMotivate:{am:'ማነቃቂያ',en:'Motivation'},
+    aiMenu:{am:'ወደ ምናሌ',en:'Menu'},
+    worstDay:{am:'ደካማ ቀን',en:'Worst day'},
+    monthTrend:{am:'ወርሃዊ አዝማሚያ',en:'Monthly trend'},
+    successPred:{am:'የስኬት ትንበያ',en:'Success prediction'},
+    habitCorr:{am:'የልማድ ትስስር',en:'Habit correlation'},
+    avgTime:{am:'አማካይ ማጠናቀቂያ ሰዓት',en:'Avg completion time'},
+  };
+  return (TXT[key]&&TXT[key][t])||key;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────
+function lvlInfo(xp){let l=1,r=xp;while(r>=l*100){r-=l*100;l++;}return{lvl:l,rem:r,need:l*100}}
+function calcStreak(){
+  let s=0,d=new Date();
+  while(true){const k=dk(d);if(ST.logs[k]&&ST.logs[k].length>0){s++;d.setDate(d.getDate()-1);}else if(ST.freezeDates.includes(k)){d.setDate(d.getDate()-1);}else break;}
+  return s;
+}
+function calcLongest(){
+  const keys=Object.keys(ST.logs).filter(k=>ST.logs[k]&&ST.logs[k].length>0).sort();
+  if(!keys.length)return 0;
+  let max=1,cur=1;
+  for(let i=1;i<keys.length;i++){
+    const[y1,m1,d1]=keys[i-1].split('-').map(Number);
+    const[y2,m2,d2]=keys[i].split('-').map(Number);
+    const diff=Math.round((new Date(y2,m2-1,d2)-new Date(y1,m1-1,d1))/86400000);
+    if(diff===1){cur++;max=Math.max(max,cur);}else cur=1;
+  }
+  return max;
+}
+function bestMonth(){
+  const counts={};
+  Object.entries(ST.logs).forEach(([k,v])=>{if(!v||!v.length)return;const[y,m]=k.split('-');const key=`${y}-${m}`;counts[key]=(counts[key]||0)+v.length;});
+  const keys=Object.keys(counts);if(!keys.length)return'—';
+  const best=keys.reduce((a,b)=>counts[a]>counts[b]?a:b);
+  const[y,m]=best.split('-').map(Number);
+  return`${(ST.lang==='am'?MONTHS_AM:MONTHS_EN)[m-1]} ${y}`;
+}
+function compRate(){
+  const dates=Object.keys(ST.logs);
+  if(!dates.length||!ST.habits.length)return 0;
+  const tot=dates.length*ST.habits.length;
+  const done=dates.reduce((a,k)=>a+(ST.logs[k]?.length||0),0);
+  return Math.round((done/tot)*100);
+}
+function isScheduledOn(h,d){
+  const s=h.schedule;
+  if(!s||s.type==='daily')return true;
+  const day=d.getDay(); // 0=Sun..6=Sat
+  if(s.type==='weekdays')return day>=1&&day<=5;
+  if(s.type==='weekends')return day===0||day===6;
+  if(s.type==='everyX'){
+    const x=Math.max(1,s.x||2);
+    const start=h.createdAt?new Date(h.createdAt):d;
+    const diff=Math.round((new Date(dk(d)).getTime()-new Date(dk(start)).getTime())/86400000);
+    return diff>=0&&diff%x===0;
+  }
+  return true;
+}
+function isScheduledToday(h){return isScheduledOn(h,new Date())}
+function todayHabits(){return ST.showTodayOnly?ST.habits.filter(isScheduledToday):ST.habits}
+function scheduleLabel(h){
+  const s=h.schedule;
+  if(!s||s.type==='daily')return L('schDaily');
+  if(s.type==='weekdays')return L('schWeekdays');
+  if(s.type==='weekends')return L('schWeekends');
+  if(s.type==='everyX')return`${ST.lang==='am'?'በየ':'every '}${s.x||2}${ST.lang==='am'?' ቀን':' days'}`;
+  return'';
+}
+function countCompletions(start,end){
+  let n=0;
+  Object.entries(ST.logs).forEach(([k,v])=>{
+    if(!v||!v.length)return;
+    const[y,m,d]=k.split('-').map(Number);
+    const dt=new Date(y,m-1,d);
+    if(dt>=start&&dt<=end)n+=v.length;
+  });
+  return n;
+}
+function weekRange(){
+  const end=new Date();end.setHours(23,59,59,999);
+  const start=new Date();start.setDate(start.getDate()-start.getDay());start.setHours(0,0,0,0);
+  return{start,end};
+}
+function monthRange(){
+  const end=new Date();end.setHours(23,59,59,999);
+  const start=new Date(end.getFullYear(),end.getMonth(),1);
+  return{start,end};
+}
+function yearRange(){
+  const end=new Date();end.setHours(23,59,59,999);
+  const start=new Date(end.getFullYear(),0,1);
+  return{start,end};
+}
+function buildRing(pct,size,color,muted,label){
+  const r=size/2-6,circ=2*Math.PI*r,cx=size/2,cy=size/2;
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));svg.style.transform='rotate(-90deg)';
+  const bg=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  bg.setAttribute('cx',String(cx));bg.setAttribute('cy',String(cy));bg.setAttribute('r',String(r));
+  bg.setAttribute('fill','none');bg.setAttribute('stroke',muted);bg.setAttribute('stroke-width','7');
+  const fg=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  fg.setAttribute('cx',String(cx));fg.setAttribute('cy',String(cy));fg.setAttribute('r',String(r));
+  fg.setAttribute('fill','none');fg.setAttribute('stroke',color);fg.setAttribute('stroke-width','7');
+  const clamped=Math.min(1,Math.max(0,pct));
+  fg.setAttribute('stroke-dasharray',String(circ));fg.setAttribute('stroke-dashoffset',String(circ*(1-clamped)));
+  fg.setAttribute('stroke-linecap','round');fg.style.transition='stroke-dashoffset .5s';
+  svg.appendChild(bg);svg.appendChild(fg);
+  const wrap=div({style:{position:'relative',width:`${size}px`,height:`${size}px`,flexShrink:'0'}},[svg]);
+  wrap.appendChild(div({style:{position:'absolute',inset:'0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size>70?'15px':'12px',fontWeight:'700',color}},label||`${Math.round(clamped*100)}%`));
+  return wrap;
+}
+
+// ── PDF Report ───────────────────────────────────────────────────
+function loadJsPDF(){
+  return new Promise((res,rej)=>{
+    if(window.jspdf){res();return;}
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload=()=>res();s.onerror=()=>rej(new Error('load fail'));
+    document.head.appendChild(s);
+  });
+}
+async function generatePdfReport(onDone){
+  try{
+    await loadJsPDF();
+    const{jsPDF}=window.jspdf;
+    const doc=new jsPDF();
+    const am=ST.lang==='am';
+    let y=20;
+    doc.setFontSize(20);doc.text('LIMAD - '+(am?'ወርሃዊ ሪፖርት':'Monthly Report'),14,y);y+=10;
+    doc.setFontSize(10);doc.setTextColor(120);doc.text(new Date().toLocaleDateString(),14,y);y+=12;
+    doc.setTextColor(0);doc.setFontSize(13);
+    const rows=[
+      [am?'ስም':'Name',ST.profile.name||'-'],
+      [am?'ጠቅላላ XP':'Total XP',String(ST.xp)],
+      [am?'ደረጃ':'Level',String(lvlInfo(ST.xp).lvl)],
+      [am?'የአሁኑ streak':'Current streak',String(calcStreak())],
+      [am?'ምርጥ streak':'Best streak',String(calcLongest())],
+      [am?'የማጠናቀቅ መጠን':'Completion rate',compRate()+'%'],
+      [am?'ልማዶች ብዛት':'Total habits',String(ST.habits.length)],
+      [am?'ምርጥ ወር':'Best month',bestMonth()],
+    ];
+    rows.forEach(([k,v])=>{doc.text(`${k}:`,14,y);doc.text(String(v),100,y);y+=8;});
+    y+=4;
+    doc.setFontSize(14);doc.text(am?'ልማዶች':'Habits',14,y);y+=8;
+    doc.setFontSize(10);
+    ST.habits.forEach(h=>{
+      if(y>280){doc.addPage();y=20;}
+      doc.text(`• ${h.name} (${h.cat||''}) — ${scheduleLabel(h)}`,14,y);y+=7;
+    });
+    doc.save(`limad-report-${dk()}.pdf`);
+    onDone(true);
+  }catch(e){onDone(false);}
+}
+
+// ── Online / Offline tracking ────────────────────────────────────
+if(typeof window!=='undefined'){
+  window.addEventListener('online',()=>{ST.online=true;render();});
+  window.addEventListener('offline',()=>{ST.online=false;render();});
+}
+
+// ── Local AI Coach (offline fallback, rule-based) ────────────────
+function localCoachMessage(){
+  const am=ST.lang==='am';
+  const str=calcStreak();
+  const d=done();
+  const total=ST.habits.length;
+  const pct=total?Math.round((d.length/total)*100):0;
+  if(!total){
+    return am?'ገና ልማድ አልጨመርክም። አንድ ትንሽ ልማድ ጀምር — ትልቅ ጉዞ በአንድ ርምጃ ይጀምራል! 🌱':'You haven\'t added any habits yet. Start with one small habit — every journey begins with a step! 🌱';
+  }
+  if(pct===100){
+    return am?`🎉 ዛሬ ሁሉንም ${total} ልማዶች ጨርሰሃል! ${str} ቀን ተከታታይ። ይህን ሞመንተም ጠብቅ፣ ነገም ተመሳሳይ አድርግ! 🔥`:`🎉 You completed all ${total} habits today! ${str}-day streak going. Keep this momentum tomorrow! 🔥`;
+  }
+  if(str>=7){
+    return am?`🔥 ${str} ቀን ተከታታይ ላይ ነህ — በጣም ጠንካራ! ዛሬ ${d.length}/${total} ጨርሰሃል፣ ቀሪውንም ጨርስ። ወጥነት ልማድ ይፈጥራል።`:`🔥 ${str}-day streak — impressive consistency! You're at ${d.length}/${total} today, finish the rest. Consistency builds identity.`;
+  }
+  if(d.length===0){
+    return am?'ዛሬ ገና አልጀመርክም። አንድ ትንሽ ልማድ አሁን ጨርስ፣ ሞመንተም ይገነባል። ትንሽ ርምጃ ይበቃል! 💪':'You haven\'t checked off anything today. Complete one small habit now to build momentum. A small step is enough! 💪';
+  }
+  return am?`${d.length}/${total} ጨርሰሃል፣ ጥሩ ጅምር ነው። ቀሪውንም ጨርስና ቀኑን በሙሉ ፍጹም አድርገው! ${str>0?'🔥 '+str+' ቀን ተከታታይ ይቀጥል!':''}`:`${d.length}/${total} done — good start. Finish the rest and make today complete! ${str>0?'🔥 Keep the '+str+'-day streak alive!':''}`;
+}
+
+function haptic(ms){try{if(navigator.vibrate)navigator.vibrate(ms||12);}catch{}}
+
+function playDing(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const o=ctx.createOscillator(),g=ctx.createGain();
+    o.connect(g);g.connect(ctx.destination);
+    o.frequency.value=880;o.type='sine';
+    g.gain.setValueAtTime(0.15,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+    o.start();o.stop(ctx.currentTime+0.4);
+  }catch{}
+}
+
+function showFlash(msg){
+  ST.flash=msg;render();
+  setTimeout(()=>{ST.flash=null;render();},1300);
+}
+
+function loadState(){
+  const pin=LS.get('pin'); ST.hasPin=!!pin;
+  ST.habits=LS.get('habits')||[];
+  ST.logs=LS.get('logs')||{};
+  ST.xpLog=LS.get('xpLog')||{};
+  ST.xp=LS.get('xp')||0;
+  ST.theme=LS.get('theme')||'dark';
+  ST.lang=LS.get('lang')||'am';
+  ST.profile=LS.get('profile')||{};
+  if(!ST.profile.gender){ST.profile.gender='male';LS.set('profile',ST.profile);}
+  ST.freezeDates=LS.get('freezeDates')||[];
+  ST.freezeAvail=LS.get('freezeAvail')??1;
+  ST.soundOn=LS.get('soundOn')??true;
+  ST.goals=LS.get('goals')||{weekly:0,monthly:0,yearly:0};
+  ST.aiEndpoint=LS.get('aiEndpoint')||'';
+  ST.tgToken=LS.get('tgToken')||'';
+  ST.tgChatId=LS.get('tgChatId')||'';
+  ST.autoBackupOn=LS.get('autoBackupOn')??false;
+  ST.lastBackupDate=LS.get('lastBackupDate')||null;
+  ST.logTimes=LS.get('logTimes')||{};
+  ST.focusLog=LS.get('focusLog')||{};
+  ST.focus.workMin=LS.get('focusWorkMin')||25;
+  ST.focus.breakMin=LS.get('focusBreakMin')||5;
+  ST.focus.remaining=ST.focus.workMin*60;
+  ST.focus.totalSessions=Object.values(ST.focusLog).reduce((a,v)=>a+v,0);
+  ST.focus.sessionsToday=ST.focusLog[today()]||0;
+  // daily challenge
+  const cd=LS.get('challengeDate');
+  const cv=LS.get('challenge');
+  const cdd=LS.get('challengeDoneDate');
+  if(cd===today()&&cv){ST.challenge=cv;ST.challengeDate=cd;ST.challengeDone=cdd===today();}
+  else{pickChallenge();}
+  // Gamification: coins, themes, avatars, daily reward, badges
+  ST.coins=LS.get('coins')||0;
+  ST.unlockedThemes=LS.get('unlockedThemes')||['dark','amoled'];
+  ST.unlockedAvatars=LS.get('unlockedAvatars')||[];
+  ST.claimedBadges=LS.get('claimedBadges')||[];
+  ST.lastRewardClaim=LS.get('lastRewardClaim')||null;
+  ST.loginStreak=LS.get('loginStreak')||0;
+  const lastOpen=LS.get('lastOpenDate');
+  if(lastOpen!==today()){
+    const y=new Date();y.setDate(y.getDate()-1);
+    ST.loginStreak=(lastOpen===dk(y))?ST.loginStreak+1:1;
+    LS.set('loginStreak',ST.loginStreak);LS.set('lastOpenDate',today());
+  }
+}
+
+function pickChallenge(){
+  const list=ST.lang==='am'?CH_AM:CH_EN;
+  const c=list[Math.floor(Math.random()*list.length)];
+  ST.challenge=c;ST.challengeDate=today();ST.challengeDone=false;
+  LS.set('challenge',c);LS.set('challengeDate',today());
+}
+
+// ── Render Engine ────────────────────────────────────────────────
+function el(tag,attrs,children){
+  const e=document.createElement(tag);
+  if(attrs)Object.entries(attrs).forEach(([k,v])=>{
+    if(k==='style'&&typeof v==='object')Object.assign(e.style,v);
+    else if(k.startsWith('on'))e.addEventListener(k.slice(2).toLowerCase(),v);
+    else e.setAttribute(k,v);
+  });
+  if(children){
+    if(!Array.isArray(children))children=[children];
+    children.flat(Infinity).forEach(c=>{
+      if(c==null||c===false)return;
+      e.appendChild(typeof c==='string'?document.createTextNode(c):c);
+    });
+  }
+  return e;
+}
+function div(attrs,children){return el('div',attrs,children)}
+function btn(attrs,children){return el('button',attrs,children)}
+function span(attrs,children){return el('span',attrs,children)}
+function inp(attrs){return el('input',attrs)}
+function txt(attrs,children){return el('textarea',attrs,children)}
+
+const app=document.getElementById('app');
+function render(){
+  app.innerHTML='';
+  applyThemeBody();
+  const c=build();
+  if(Array.isArray(c))c.forEach(n=>app.appendChild(n));
+  else app.appendChild(c);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    app.querySelectorAll('.lm-bar[data-target]').forEach(el=>{el.style.transition='height .6s cubic-bezier(.2,.8,.2,1)';el.style.height=el.getAttribute('data-target');});
+  }));
+}
+if(typeof document!=='undefined'&&!window._rippleBound){
+  window._rippleBound=true;
+  document.addEventListener('pointerdown',e=>{
+    const b=e.target.closest('button');
+    if(!b)return;
+    const rect=b.getBoundingClientRect();
+    const r=document.createElement('span');
+    const size=Math.max(rect.width,rect.height);
+    r.className='lm-ripple';
+    r.style.width=r.style.height=size+'px';
+    r.style.left=(e.clientX-rect.left-size/2)+'px';
+    r.style.top=(e.clientY-rect.top-size/2)+'px';
+    if(getComputedStyle(b).position==='static')b.style.position='relative';
+    b.style.overflow='hidden';
+    b.appendChild(r);
+    setTimeout(()=>r.remove(),500);
+  },{passive:true});
+}
+
+function applyThemeBody(){
+  document.body.style.background=T().BG;
+  document.documentElement.style.background=T().BG;
+}
+
+// ── Screens ──────────────────────────────────────────────────────
+function build(){
+  if(ST.screen==='splash')return buildSplash();
+  if(ST.screen==='pin')return buildPin();
+  return buildApp();
+}
+
+function buildSplash(){
+  const feats=ST.lang==='am'
+    ?[['🔥','Streak'],['🤖','AI Coach'],['🏆','ሽልማቶች'],['📈','ግራፎች'],['🔔','ማስታወሻ'],['🎨','9 Themes']]
+    :[['🔥','Streak'],['🤖','AI Coach'],['🏆','Awards'],['📈','Charts'],['🔔','Reminders'],['🎨','9 Themes']];
+  return div({style:{minHeight:'100vh',background:'#0D0D0D',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'space-between',padding:'60px 28px 40px',position:'relative',overflow:'hidden'}},[
+    div({style:{position:'absolute',top:'-80px',left:'50%',transform:'translateX(-50%)',width:'300px',height:'300px',background:'#E8C54718',borderRadius:'50%',filter:'blur(80px)',pointerEvents:'none'}}),
+    div({style:{display:'flex',flexDirection:'column',alignItems:'center',gap:'16px'}},[
+      div({style:{textAlign:'center'}},[
+        div({style:{fontSize:'64px',fontWeight:'900',color:'#E8C547',letterSpacing:'4px',textShadow:'0 0 60px #E8C54766',lineHeight:'1'}},L('appName')),
+        div({style:{fontSize:'13px',color:'#555',marginTop:'4px',letterSpacing:'2px'}},'LIMAD · ልማድ'),
+      ]),
+      div({style:{textAlign:'center',fontSize:'15px',color:'#888',maxWidth:'260px',lineHeight:'1.7',marginTop:'8px'}},[
+        L('tagline'),el('br'),
+        span({style:{color:'#E8C547',fontWeight:'600'}},L('tagSub')),
+      ]),
+      div({style:{display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center',marginTop:'12px',maxWidth:'320px'}},
+        feats.map(([ic,tx])=>div({style:{display:'flex',alignItems:'center',gap:'6px',padding:'6px 12px',borderRadius:'20px',background:'#141414',border:'1px solid #222',fontSize:'12px',color:'#999'}},[span({},ic),span({},tx)]))),
+    ]),
+    div({style:{width:'100%',maxWidth:'320px'}},[
+      btn({style:{width:'100%',padding:'18px 0',borderRadius:'20px',border:'none',background:'#E8C547',color:'#0D0D0D',fontSize:'17px',fontWeight:'800',letterSpacing:'.5px',boxShadow:'0 0 40px #E8C54744'},onclick(){
+        LS.set('seen',true);ST.screen='pin';render();
+      }},L('start')),
+      div({style:{textAlign:'center',color:'#333',fontSize:'11px',marginTop:'14px'}},L('pinHint')),
+    ]),
+  ]);
+}
+
+function buildPin(){
+  const t=T();
+  return div({style:{minHeight:'100vh',background:t.BG,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'28px'}},[
+    div({style:{fontSize:'44px',fontWeight:'900',color:t.AC,letterSpacing:'3px',textShadow:`0 0 40px ${t.AC}44`}},L('appName')),
+    div({style:{color:t.DM,fontSize:'13px'}},ST.hasPin?L('pinEnter'):L('pinNew')),
+    div({id:'pin-dots',style:{display:'flex',gap:'14px',animation:ST.pinErr?'shake .5s':''}},[
+      ...[0,1,2,3].map(i=>div({style:{width:'13px',height:'13px',borderRadius:'50%',background:ST.digits[i]!=null?(ST.pinErr?'#E84747':t.AC):'#222',transition:'background .15s',boxShadow:ST.digits[i]!=null&&!ST.pinErr?`0 0 8px ${t.AC}88`:'none'}})),
+    ]),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(3,66px)',gap:'10px'}},
+      [1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(d=>btn({
+        style:{width:'66px',height:'66px',borderRadius:'16px',border:`1px solid ${t.BD}`,background:d===''?'transparent':t.CARD,color:t.TX,fontSize:'21px',fontWeight:'600'},
+        onclick(){
+          if(d==='⌫'){ST.digits=ST.digits.slice(0,-1);render();return;}
+          if(d==='')return;
+          const next=[...ST.digits,String(d)];
+          ST.digits=next;render();
+          if(next.length===4){
+            if(!ST.hasPin){LS.set('pin',next.join(''));ST.hasPin=true;goApp();}
+            else{
+              const saved=LS.get('pin');
+              if(saved===next.join('')){goApp();}
+              else{ST.pinErr=true;render();setTimeout(()=>{ST.digits=[];ST.pinErr=false;render();},700);}
+            }
+          }
+        }
+      },String(d)))
+    ),
+  ]);
+}
+
+function focusTick(){
+  const f=ST.focus;
+  if(!f.running)return;
+  f.remaining--;
+  if(f.remaining<=0){
+    if(f.mode==='work'){
+      const k=today();
+      ST.focusLog[k]=(ST.focusLog[k]||0)+1;
+      LS.set('focusLog',ST.focusLog);
+      f.sessionsToday=ST.focusLog[k];
+      f.totalSessions++;
+      ST.xp+=15;LS.set('xp',ST.xp);
+      haptic(35);if(ST.soundOn)playDing();
+      showFlash(L('focusDone'));
+      f.mode='break';f.remaining=f.breakMin*60;
+    }else{
+      haptic(20);if(ST.soundOn)playDing();
+      showFlash(L('focusBreakOver'));
+      f.mode='work';f.remaining=f.workMin*60;
+      f.running=false;
+    }
+  }
+  if(ST.screen==='app'&&ST.tab==='focus')render();
+}
+if(typeof window!=='undefined'&&!window._focusIntervalSet){
+  window._focusIntervalSet=true;
+  setInterval(focusTick,1000);
+}
+
+function goApp(){
+  ST.digits=[];ST.pinErr=false;ST.screen='app';ST.tab='home';
+  if(!ST.addForm.cat)ST.addForm.cat=(ST.lang==='am'?CATS_AM:CATS_EN)[0];
+  render();
+  // reminder check
+  setInterval(()=>{
+    ST.habits.forEach(h=>{
+      if(!h.reminder)return;
+      const n=new Date();const[hh,mm]=h.reminder.split(':').map(Number);
+      if(n.getHours()===hh&&n.getMinutes()===mm&&n.getSeconds()<3){
+        if(Notification&&Notification.permission==='granted')new Notification(L('appName'),{body:h.name});
+      }
+    });
+  },2000);
+}
+
+function buildApp(){
+  const t=T();
+  const str=calcStreak();
+  const d=done();
+  const total=todayHabits().length;
+  const pct=total?Math.round((d.filter(id=>todayHabits().some(h=>h.id===id)).length/total)*100):0;
+  const{lvl,rem,need}=lvlInfo(ST.xp);
+
+  const tabs=[
+    ['home','🏠',L('today')],['calendar','📅',L('calendar')],['add','＋',L('add')],
+    ['ai','🤖',L('ai')],['more','👤',L('more')],
+  ];
+  const MORE_TARGETS=['charts','awards','goals','settings','profile'];
+
+  return div({style:{background:t.BG,color:t.TX,minHeight:'100vh',position:'relative',overflow:'hidden'}},[
+    // Dynamic animated background
+    div({class:'lm-dynbg',style:{background:`radial-gradient(circle at 20% 20%, ${t.AC}22, transparent 55%), radial-gradient(circle at 80% 70%, ${t.AC}18, transparent 50%)`}}),
+    buildParticles(t),
+    // Flash
+    ST.flash?div({style:{position:'fixed',top:'72px',left:'50%',transform:'translateX(-50%)',background:t.AC,color:'#0D0D0D',padding:'7px 20px',borderRadius:'20px',fontWeight:'700',fontSize:'13px',zIndex:'999',animation:'fadeup .9s forwards',whiteSpace:'nowrap',pointerEvents:'none'}},ST.flash):null,
+    // Offline banner
+    !ST.online?div({style:{background:'#3A2A0688',color:'#FFD700',fontSize:'11px',textAlign:'center',padding:'6px 10px'}},L('offlineBanner')):null,
+    // Confetti
+    ST.confetti?buildConfetti():null,
+    // Header
+    div({class:'lm-glass',style:{padding:'18px 18px 10px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:`1px solid ${t.BD}`,background:t.BG+'E6',position:'sticky',top:'0',zIndex:'50'}},[
+      div({},[
+        div({style:{fontSize:'24px',fontWeight:'900',color:t.AC,letterSpacing:'2px'}},L('appName')),
+        div({style:{fontSize:'11px',color:t.DM,marginTop:'2px'}},`${(ST.lang==='am'?DAYS_AM:DAYS_EN)[new Date().getDay()]} · ${new Date().getDate()} ${(ST.lang==='am'?MONTHS_AM:MONTHS_EN)[new Date().getMonth()]}`),
+      ]),
+      div({style:{textAlign:'right'}},[
+        div({style:{fontSize:'11px',color:t.DM}},`${L('level')} ${lvl} · 🔥 ${str}`),
+        div({style:{fontSize:'17px',fontWeight:'800',color:t.AC}},`${ST.xp} XP`),
+        div({style:{fontSize:'12px',fontWeight:'700',color:t.TX,marginTop:'2px'}},`🪙 ${ST.coins}`),
+        div({style:{width:'76px',height:'3px',background:t.MU,borderRadius:'2px',marginTop:'4px',marginLeft:'auto'}},[
+          div({style:{width:`${(rem/need)*100}%`,height:'100%',background:t.AC,borderRadius:'2px',transition:'width .4s'}}),
+        ]),
+      ]),
+    ]),
+    // Content
+    div({class:'lm-tabcontent',style:{padding:'12px 14px 0',position:'relative',zIndex:'1'}},[ buildTab() ]),
+    // Bottom Nav
+    div({class:'lm-glass',style:{position:'fixed',bottom:'0',left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:'430px',background:t.CARD+'E6',borderTop:`1px solid ${t.BD}`,display:'flex',overflowX:'auto',padding:'6px 0 12px',zIndex:'100'}},
+      tabs.map(([tb,ico,lbl])=>{
+        const active=tb==='more'?(MORE_TARGETS.includes(ST.tab)||ST.tab==='more'):ST.tab===tb;
+        return btn({
+        style:{display:'flex',flexDirection:'column',alignItems:'center',gap:'2px',background:'none',border:'none',padding:'4px 2px',flex:'1 0 auto',minWidth:'52px'},
+        onclick(){haptic(8);ST.tab=tb;if(tb==='add'&&!ST.addForm.cat)ST.addForm.cat=(ST.lang==='am'?CATS_AM:CATS_EN)[0];render();}
+      },[
+        div({style:{fontSize:active?'20px':'16px',opacity:active?'1':'.3',transition:'all .15s'}},ico),
+        div({style:{fontSize:'8.5px',color:active?t.AC:t.DM,fontWeight:active?'700':'400',whiteSpace:'nowrap'}},lbl),
+      ]);})
+    ),
+    buildBottomSheet(),
+  ]);
+}
+
+function buildBottomSheet(){
+  const sh=window._sheet;
+  if(!sh||!sh.open)return null;
+  const t=T();
+  const h=ST.habits.find(x=>x.id===sh.habitId);
+  if(!h){window._sheet=null;return null;}
+  const close=()=>{window._sheet=null;render();};
+  return div({},[
+    div({class:'lm-sheet-backdrop',onclick(){close();}}),
+    div({class:'lm-sheet',style:{background:t.CARD,padding:'10px 18px 26px',boxShadow:'0 -8px 30px rgba(0,0,0,.4)'}},[
+      div({style:{width:'40px',height:'4px',background:t.MU,borderRadius:'2px',margin:'6px auto 16px'}}),
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'14px'}},h.name),
+      div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},ST.lang==='am'?'ስም':'Name'),
+      inp({type:'text',value:sh.editName,style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',marginBottom:'14px'},oninput(e){sh.editName=e.target.value;}}),
+      btn({style:{width:'100%',padding:'13px',borderRadius:'14px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'14px',marginBottom:'10px'},onclick(){
+        if(!sh.editName.trim())return;
+        haptic(10);
+        ST.habits=ST.habits.map(x=>x.id===h.id?{...x,name:sh.editName.trim()}:x);LS.set('habits',ST.habits);
+        showFlash('✓ '+(ST.lang==='am'?'ተስተካክሏል':'Saved'));close();
+      }},'💾 '+(ST.lang==='am'?'አስቀምጥ':'Save')),
+      btn({style:{width:'100%',padding:'13px',borderRadius:'14px',border:`1px solid ${t.MU}`,background:'transparent',color:t.TX,fontWeight:'600',fontSize:'14px',marginBottom:'10px'},onclick(){
+        haptic(10);
+        const dup={...h,id:Date.now().toString(),name:h.name+(ST.lang==='am'?' (ቅጂ)':' (copy)'),createdAt:new Date().toISOString()};
+        ST.habits=[...ST.habits,dup];LS.set('habits',ST.habits);
+        showFlash('📄 '+(ST.lang==='am'?'ተደግሟል':'Duplicated'));close();
+      }},'📄 '+(ST.lang==='am'?'ድገም':'Duplicate')),
+      btn({style:{width:'100%',padding:'13px',borderRadius:'14px',border:'1px solid #EF4444',background:'transparent',color:'#EF4444',fontWeight:'700',fontSize:'14px'},onclick(){
+        haptic(20);
+        ST.habits=ST.habits.filter(x=>x.id!==h.id);LS.set('habits',ST.habits);
+        close();
+      }},'🗑 '+(ST.lang==='am'?'ሰርዝ':'Delete')),
+    ]),
+  ]);
+}
+function buildParticles(t){
+  if(!window._particleSeed){
+    window._particleSeed=Array.from({length:14}).map(()=>({
+      left:Math.random()*100,size:2+Math.random()*4,dur:14+Math.random()*16,delay:-Math.random()*20,
+    }));
+  }
+  return div({style:{position:'fixed',inset:'0',zIndex:'0',pointerEvents:'none',overflow:'hidden'}},
+    window._particleSeed.map(p=>div({class:'lm-particle',style:{left:`${p.left}%`,bottom:'-10px',width:`${p.size}px`,height:`${p.size}px`,background:t.AC,animationDuration:`${p.dur}s`,animationDelay:`${p.delay}s`}}))
+  );
+}
+function buildConfetti(){
+  const colors=['#E8C547','#fff','#FFD700','#4ADE80','#A78BFA','#F472B6'];
+  return div({style:{position:'fixed',inset:'0',pointerEvents:'none',zIndex:'998',overflow:'hidden'}},
+    Array.from({length:28}).map((_,i)=>{
+      const left=Math.random()*100,delay=Math.random()*0.4,dur=1+Math.random()*1,size=5+Math.random()*6,color=colors[i%colors.length];
+      return div({style:{position:'absolute',top:'-20px',left:`${left}%`,width:`${size}px`,height:`${size*1.6}px`,background:color,opacity:'0.9',animation:`confettiFall ${dur}s ${delay}s ease-in forwards`,borderRadius:'2px'}});
+    })
+  );
+}
+
+function buildTab(){
+  const t=ST.tab;
+  if(t==='home')return buildHome();
+  if(t==='calendar')return buildCalendar();
+  if(t==='goals')return buildGoals();
+  if(t==='charts')return buildCharts();
+  if(t==='ai')return buildAI();
+  if(t==='more')return buildMore();
+  if(t==='awards')return div({},[buildAwards(),buildRewards()]);
+  if(t==='add')return buildAdd();
+  if(t==='profile')return buildProfile();
+  if(t==='settings')return buildSettings();
+  return div({});
+}
+
+// ── HOME ─────────────────────────────────────────────────────────
+function buildHome(){
+  const t=T();
+  const d=done();
+  const visible=todayHabits();
+  const total=visible.length;
+  const pct=total?Math.round((d.filter(id=>visible.some(h=>h.id===id)).length/total)*100):0;
+  const str=calcStreak();
+  const nodes=[];
+
+  // Today-only filter toggle (only shown if any habit has a non-daily schedule)
+  if(ST.habits.some(h=>h.schedule&&h.schedule.type!=='daily')){
+    nodes.push(div({style:{display:'flex',justifyContent:'flex-end',marginBottom:'8px'}},[
+      btn({style:{padding:'6px 12px',borderRadius:'20px',border:`1px solid ${t.AC}`,background:ST.showTodayOnly?t.AC:'transparent',color:ST.showTodayOnly?'#0D0D0D':t.AC,fontSize:'11px',fontWeight:'600'},onclick(){ST.showTodayOnly=!ST.showTodayOnly;render();}},`📅 ${ST.showTodayOnly?L('todayOnly'):L('showAll')}`),
+    ]));
+  }
+
+  // Daily challenge
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'16px',marginBottom:'12px',border:`1px solid ${t.BD}`}},[
+    div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}},[
+      div({style:{fontSize:'13px',fontWeight:'700'}},`🏅 ${L('challenge')}`),
+      ST.challengeDone?div({style:{fontSize:'11px',color:t.AC,fontWeight:'600'}},L('chDone')):null,
+    ]),
+    div({style:{fontSize:'14px',marginBottom:ST.challengeDone?0:'12px',textDecoration:ST.challengeDone?'line-through':'none',opacity:ST.challengeDone?.6:1}},ST.challenge),
+    !ST.challengeDone?btn({style:{width:'100%',padding:'9px',borderRadius:'12px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'12px'},onclick(){
+      ST.challengeDone=true;LS.set('challengeDoneDate',today());
+      ST.xp+=CH_XP;LS.set('xp',ST.xp);
+      showFlash(`+${CH_XP} XP 🏅`);
+      if(ST.soundOn)playDing();
+    }},ST.lang==='am'?'✓ ተጠናቀቀ':'✓ Mark complete'):null,
+  ]));
+
+  // Progress ring
+  const r=25,circ=2*Math.PI*r;
+  const ring=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  ring.setAttribute('width','66');ring.setAttribute('height','66');ring.style.transform='rotate(-90deg)';
+  const bg=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  bg.setAttribute('cx','33');bg.setAttribute('cy','33');bg.setAttribute('r',String(r));
+  bg.setAttribute('fill','none');bg.setAttribute('stroke',t.MU);bg.setAttribute('stroke-width','5');
+  const fg=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  fg.setAttribute('cx','33');fg.setAttribute('cy','33');fg.setAttribute('r',String(r));
+  fg.setAttribute('fill','none');fg.setAttribute('stroke',t.AC);fg.setAttribute('stroke-width','5');
+  fg.setAttribute('stroke-dasharray',String(circ));fg.setAttribute('stroke-dashoffset',String(circ*(1-pct/100)));
+  fg.setAttribute('stroke-linecap','round');fg.style.transition='stroke-dashoffset .5s';
+  ring.appendChild(bg);ring.appendChild(fg);
+  const ringWrap=div({style:{position:'relative',width:'66px',height:'66px',flexShrink:'0'}},[ring]);
+  const pctLbl=div({style:{position:'absolute',inset:'0',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:'700',color:t.AC}},`${pct}%`);
+  ringWrap.appendChild(pctLbl);
+
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'16px',marginBottom:'12px',display:'flex',gap:'16px',alignItems:'center',border:`1px solid ${t.BD}`}},[
+    ringWrap,
+    div({},[
+      div({style:{fontSize:'15px',fontWeight:'700'}},`${d.length}/${total} ${L('done')}`),
+      div({style:{fontSize:'11px',color:t.DM,marginTop:'2px'}},L('doneToday')),
+      pct===100&&total>0?div({style:{fontSize:'12px',color:t.AC,marginTop:'5px',fontWeight:'600'}},L('perfect')):null,
+      str>0?div({style:{fontSize:'11px',color:'#F97316',marginTop:'4px'}},`🔥 ${str} ${L('streak')}`):null,
+    ]),
+  ]));
+
+  // Freeze day
+  nodes.push(div({style:{background:t.CARD,borderRadius:'14px',padding:'12px 14px',marginBottom:'12px',display:'flex',alignItems:'center',justifyContent:'space-between',border:`1px solid ${t.BD}`}},[
+    div({},[
+      div({style:{fontSize:'13px',fontWeight:'700'}},L('freeze')),
+      div({style:{fontSize:'10px',color:t.DM,marginTop:'2px'}},L('freezeDesc')),
+    ]),
+    btn({style:{padding:'7px 13px',borderRadius:'12px',border:`1px solid ${ST.freezeAvail>0?'#60A5FA':t.MU}`,background:'transparent',color:ST.freezeAvail>0?'#60A5FA':t.DM,fontSize:'11px',fontWeight:'600'},onclick(){
+      if(ST.freezeAvail<=0)return;
+      const y=new Date();y.setDate(y.getDate()-1);const yk=dk(y);
+      if(!ST.logs[yk]||!ST.logs[yk].length){
+        ST.freezeDates=[...ST.freezeDates,yk];LS.set('freezeDates',ST.freezeDates);
+        ST.freezeAvail=ST.freezeAvail-1;LS.set('freezeAvail',ST.freezeAvail);
+        showFlash('❄ Streak ተጠበቀ!');render();
+      }
+    }},ST.freezeAvail>0?L('useFreeze'):L('freezeUsed')),
+  ]));
+
+  // Habits
+  if(!ST.habits.length){
+    nodes.push(div({style:{textAlign:'center',padding:'40px 20px',color:t.DM}},[
+      div({style:{fontSize:'40px',marginBottom:'12px'}},'🌱'),
+      div({style:{fontSize:'15px',marginBottom:'8px'}},L('noHabits')),
+      btn({style:{padding:'10px 24px',borderRadius:'20px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'13px'},onclick(){ST.tab='add';render();}},L('addFirst')),
+    ]));
+  } else if(!visible.length){
+    nodes.push(div({style:{textAlign:'center',padding:'30px 20px',color:t.DM,fontSize:'13px'}},'🎉 '+(ST.lang==='am'?'ዛሬ ምንም ልማድ አልተመደበም':'No habits scheduled today')));
+  } else {
+    visible.forEach(h=>{
+      const checked=d.includes(h.id);
+      const swiped=window._swipeOpen===h.id;
+      nodes.push(div({style:{position:'relative',marginBottom:'9px',borderRadius:'16px',overflow:'hidden'}},[
+        div({style:{position:'absolute',inset:'0',display:'flex',justifyContent:'flex-end',alignItems:'stretch'}},[
+          btn({style:{width:'84px',border:'none',background:'#EF4444',color:'#fff',fontSize:'12px',fontWeight:'700'},onclick(){
+            haptic(20);ST.habits=ST.habits.filter(x=>x.id!==h.id);LS.set('habits',ST.habits);window._swipeOpen=null;render();
+          }},ST.lang==='am'?'ሰርዝ':'Delete'),
+        ]),
+        div({style:{background:checked?t.AC+'12':t.CARD,border:`1px solid ${checked?t.AC+'44':t.BD}`,borderRadius:'16px',padding:'12px 14px',transition:'transform .2s ease',transform:swiped?'translateX(-84px)':'translateX(0)',position:'relative'},
+          ontouchstart(e){window._swipeStartX=e.touches[0].clientX;},
+          ontouchend(e){
+            const dx=e.changedTouches[0].clientX-(window._swipeStartX||0);
+            if(dx<-45){window._swipeOpen=h.id;render();}
+            else if(dx>45&&swiped){window._swipeOpen=null;render();}
+          }
+        },[
+        div({style:{display:'flex',alignItems:'center',gap:'12px'}},[
+          btn({style:{width:'30px',height:'30px',borderRadius:'50%',border:`2px solid ${checked?t.AC:t.MU}`,background:checked?t.AC:'transparent',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',color:'#0D0D0D',flexShrink:'0',transition:'all .15s'},onclick(){
+            haptic(12);
+            const isDone=done().includes(h.id);
+            const nd=isDone?done().filter(x=>x!==h.id):[...done(),h.id];
+            ST.logs={...ST.logs,[today()]:nd};LS.set('logs',ST.logs);
+            const diff=h.difficulty||'medium';
+            const xpAmt=DIFF_XP[diff]||XP_PER, coinAmt=DIFF_COIN[diff]||COIN_PER;
+            const gain=isDone?-xpAmt:xpAmt;ST.xp=Math.max(0,ST.xp+gain);LS.set('xp',ST.xp);
+            const coinGain=isDone?-coinAmt:coinAmt;ST.coins=Math.max(0,ST.coins+coinGain);LS.set('coins',ST.coins);
+            const xl={...ST.xpLog};xl[today()]=(xl[today()]||0)+gain;ST.xpLog=xl;LS.set('xpLog',xl);
+            if(!isDone){
+              recordCompletionTime(h.id);
+              showFlash(`+${xpAmt} XP ⭐ +${coinAmt} 🪙`);
+              if(ST.soundOn)playDing();
+              if(nd.length===ST.habits.length&&ST.habits.length>0){
+                ST.coins+=PERFECT_DAY_COINS;LS.set('coins',ST.coins);
+                ST.confetti=true;haptic([15,40,15,40,30]);setTimeout(()=>{ST.confetti=false;render();},2200);
+              }
+            }
+            render();
+          }},checked?'✓':''),
+          div({style:{flex:'1',minWidth:'0'}},[
+            div({style:{fontWeight:'600',fontSize:'14px',textDecoration:checked?'line-through':'none',opacity:checked?.65:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},h.name),
+            div({style:{fontSize:'11px',color:t.DM,marginTop:'2px',display:'flex',gap:'8px'}},[
+              span({},h.cat||''),
+              span({},h.difficulty==='easy'?'🟢':h.difficulty==='hard'?'🔴':'🟡'),
+              h.reminder?span({},`⏰ ${h.reminder}`):null,
+              h.schedule&&h.schedule.type!=='daily'?span({style:{color:t.AC}},`🗓 ${scheduleLabel(h)}`):null,
+            ]),
+          ]),
+          btn({style:{background:'none',border:'none',color:t.MU,fontSize:'18px',padding:'0 6px',lineHeight:'1'},onclick(){
+            haptic(10);window._sheet={open:true,habitId:h.id,editName:h.name};render();
+          }},'⋮'),
+        ]),
+        h.notes?div({style:{fontSize:'11px',color:t.DM,marginTop:'8px',paddingTop:'8px',borderTop:`1px solid ${t.BD}`,lineHeight:'1.5'}},`📝 ${h.notes}`):null,
+        ]),
+      ]));
+    });
+  }
+  return div({},nodes);
+}
+
+// ── CALENDAR ──────────────────────────────────────────────────────
+function buildCalendar(){
+  const t=T();
+  const yr=ST.calYear,m=ST.calMonth;
+  const first=new Date(yr,m,1).getDay();
+  const days=new Date(yr,m+1,0).getDate();
+  const DS=ST.lang==='am'?DAYS_S_AM:DAYS_S_EN;
+  const MO=ST.lang==='am'?MONTHS_AM:MONTHS_EN;
+  const cells=[];
+  for(let i=0;i<first;i++)cells.push(div({style:{aspectRatio:'1'}}));
+  for(let d=1;d<=days;d++){
+    const k=`${yr}-${m+1}-${d}`;
+    const cnt=(ST.logs[k]||[]).length;
+    const pct=ST.habits.length?cnt/ST.habits.length:0;
+    const isToday=dk()===k;
+    const frozen=ST.freezeDates.includes(k);
+    cells.push(div({style:{aspectRatio:'1',display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'7px',fontSize:'11px',fontWeight:isToday?'700':'400',background:frozen?'#60A5FA66':pct===1?t.AC:pct>0?t.AC+'44':t.SB,color:pct===1?'#0D0D0D':isToday?t.AC:t.TX,border:isToday?`2px solid ${t.AC}`:'2px solid transparent'}},frozen?'❄':String(d)));
+  }
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+    div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}},[
+      btn({style:{background:'none',border:'none',color:t.AC,fontSize:'22px',padding:'0 8px'},onclick(){
+        ST.calMonth--;if(ST.calMonth<0){ST.calMonth=11;ST.calYear--;}render();
+      }},'‹'),
+      div({style:{fontWeight:'700'}},`${MO[m]} ${yr}`),
+      btn({style:{background:'none',border:'none',color:t.AC,fontSize:'22px',padding:'0 8px'},onclick(){
+        ST.calMonth++;if(ST.calMonth>11){ST.calMonth=0;ST.calYear++;}render();
+      }},'›'),
+    ]),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px',marginBottom:'6px'}},DS.map(d=>div({style:{textAlign:'center',fontSize:'10px',color:t.DM,padding:'2px 0'}},d))),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'3px'}},cells),
+    div({style:{display:'flex',gap:'12px',marginTop:'12px',fontSize:'10px',color:t.DM}},[
+      span({},[div({style:{background:t.AC,borderRadius:'3px',width:'10px',height:'10px',display:'inline-block',marginRight:'4px',verticalAlign:'middle'}}),'ሙሉ']),
+      span({},[div({style:{background:t.AC+'44',borderRadius:'3px',width:'10px',height:'10px',display:'inline-block',marginRight:'4px',verticalAlign:'middle'}}),'ከፊል']),
+      span({},[div({style:{background:'#60A5FA66',borderRadius:'3px',width:'10px',height:'10px',display:'inline-block',marginRight:'4px',verticalAlign:'middle'}}),'❄ Freeze']),
+    ]),
+  ]);
+}
+
+// ── HEATMAP (GitHub style) ─────────────────────────────────────────
+function buildHeatmap(){
+  const t=T();
+  const WEEKS=12,DAYSTOT=WEEKS*7;
+  const end=new Date();
+  const endDow=end.getDay(); // 0=Sun
+  const start=new Date(end);start.setDate(start.getDate()-(DAYSTOT-1)-((6-endDow)));
+  const cols=[];
+  for(let w=0;w<WEEKS+1;w++){
+    const col=[];
+    for(let dRow=0;dRow<7;dRow++){
+      const cellDate=new Date(start);cellDate.setDate(start.getDate()+w*7+dRow);
+      if(cellDate>end){col.push(null);continue;}
+      const k=dk(cellDate);
+      const cnt=(ST.logs[k]||[]).length;
+      const pct=ST.habits.length?cnt/ST.habits.length:0;
+      col.push({date:cellDate,pct,cnt});
+    }
+    cols.push(col);
+  }
+  const colorFor=pct=>{
+    if(pct<=0)return t.SB;
+    if(pct<0.34)return t.AC+'33';
+    if(pct<0.67)return t.AC+'77';
+    if(pct<1)return t.AC+'AA';
+    return t.AC;
+  };
+  const MO=ST.lang==='am'?MONTHS_AM:MONTHS_EN;
+  let lastMonth=-1;
+  const monthLabels=cols.map(col=>{
+    const first=col.find(c=>c);
+    if(!first)return'';
+    const m=first.date.getMonth();
+    if(m!==lastMonth){lastMonth=m;return MO[m];}
+    return'';
+  });
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},L('heatTitle')),
+    div({style:{overflowX:'auto',paddingBottom:'4px'}},[
+      div({style:{display:'flex',flexDirection:'column',minWidth:`${(WEEKS+1)*15}px`}},[
+        div({style:{display:'flex',gap:'3px',marginBottom:'3px'}},monthLabels.map(lb=>div({style:{width:'12px',fontSize:'8px',color:t.DM,flexShrink:'0'}},lb))),
+        div({style:{display:'flex',gap:'3px'}},cols.map(col=>div({style:{display:'flex',flexDirection:'column',gap:'3px'}},
+          col.map(c=>div({title:c?`${dk(c.date)}: ${c.cnt}`:'',style:{width:'12px',height:'12px',borderRadius:'3px',background:c?colorFor(c.pct):'transparent'}}))
+        ))),
+      ]),
+    ]),
+    div({style:{display:'flex',alignItems:'center',gap:'6px',marginTop:'12px',fontSize:'9px',color:t.DM}},[
+      L('heatLess'),
+      ...[0,0.2,0.5,0.8,1].map(p=>div({style:{width:'10px',height:'10px',borderRadius:'2px',background:colorFor(p)}})),
+      L('heatMore'),
+    ]),
+  ]);
+}
+
+// ── GOALS DASHBOARD ─────────────────────────────────────────────────
+function buildGoals(){
+  const t=T();
+  if(!window._goalForm)window._goalForm={...ST.goals};
+  const gf=window._goalForm;
+
+  function periodCard(key,rangeFn,labelKey,icon){
+    const{start,end}=rangeFn();
+    const done=countCompletions(start,end);
+    const target=ST.goals[key]||0;
+    const pct=target>0?done/target:0;
+    return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px',display:'flex',gap:'16px',alignItems:'center',border:`1px solid ${t.BD}`}},[
+      buildRing(pct,72,t.AC,t.MU,target>0?`${Math.min(100,Math.round(pct*100))}%`:'—'),
+      div({style:{flex:'1'}},[
+        div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'4px'}},`${icon} ${L(labelKey)}`),
+        div({style:{fontSize:'13px',color:t.DM}},target>0?`${done} / ${target} ${L('completions')}`:(ST.lang==='am'?'ግብ አልተቀመጠም':'No target set')),
+        target>0&&pct>=1?div({style:{fontSize:'11px',color:t.AC,marginTop:'4px',fontWeight:'600'}},ST.lang==='am'?'🎉 ግብ ተሳክቷል!':'🎉 Goal reached!'):null,
+        div({style:{display:'flex',gap:'8px',marginTop:'10px'}},[
+          inp({type:'number',min:'0',value:String(gf[key]??0),style:{width:'80px',padding:'8px 10px',borderRadius:'10px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none'},oninput(e){gf[key]=Math.max(0,parseInt(e.target.value)||0);}}),
+          btn({style:{padding:'8px 14px',borderRadius:'10px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontSize:'12px',fontWeight:'600'},onclick(){
+            ST.goals={...ST.goals,[key]:gf[key]||0};LS.set('goals',ST.goals);showFlash(L('goalSaved'));render();
+          }},L('setTarget')),
+        ]),
+      ]),
+    ]);
+  }
+
+  return div({},[
+    div({style:{fontSize:'16px',fontWeight:'700',marginBottom:'6px'}},L('goalsTitle')),
+    div({style:{fontSize:'11px',color:t.DM,marginBottom:'16px',lineHeight:'1.5'}},L('goalHint')),
+    periodCard('weekly',weekRange,'weeklyGoal','📆'),
+    periodCard('monthly',monthRange,'monthlyGoal','🗓'),
+    periodCard('yearly',yearRange,'yearlyGoal','📅'),
+  ]);
+}
+
+// ── CHARTS ────────────────────────────────────────────────────────
+function worstWeekday(){
+  const DS=ST.lang==='am'?DAYS_AM:DAYS_EN;
+  const sums=[0,0,0,0,0,0,0],counts=[0,0,0,0,0,0,0];
+  Object.entries(ST.logs).forEach(([k,v])=>{
+    if(!v)return;
+    const[y,m,d]=k.split('-').map(Number);
+    const day=new Date(y,m-1,d).getDay();
+    sums[day]+=v.length;counts[day]++;
+  });
+  const avgs=sums.map((s,i)=>counts[i]?s/counts[i]:null);
+  const seen=avgs.map((v,i)=>v==null?Infinity:v);
+  if(seen.every(v=>v===Infinity))return'—';
+  const worst=seen.indexOf(Math.min(...seen));
+  return DS[worst];
+}
+function monthlyTrend(){
+  const now=new Date();
+  const cur30={start:new Date(now.getTime()-29*86400000),end:now};
+  const prev30={start:new Date(now.getTime()-59*86400000),end:new Date(now.getTime()-30*86400000)};
+  const curN=countCompletions(cur30.start,cur30.end),prevN=countCompletions(prev30.start,prev30.end);
+  if(prevN===0&&curN===0)return{dir:'flat',pct:0};
+  if(prevN===0)return{dir:'up',pct:100};
+  const pct=Math.round(((curN-prevN)/prevN)*100);
+  return{dir:pct>5?'up':pct<-5?'down':'flat',pct};
+}
+function successPrediction(){
+  const str=calcStreak(),rate=compRate();
+  let score=Math.min(100,Math.round(rate*0.6+Math.min(str,20)*2));
+  if(!ST.habits.length)score=0;
+  return score;
+}
+function habitCorrelation(){
+  if(ST.habits.length<2)return null;
+  const dates=Object.keys(ST.logs);
+  if(dates.length<3)return null;
+  let best=null;
+  for(let i=0;i<ST.habits.length;i++){
+    for(let j=i+1;j<ST.habits.length;j++){
+      const a=ST.habits[i],b=ST.habits[j];
+      let both=0,either=0;
+      dates.forEach(k=>{
+        const v=ST.logs[k]||[];
+        const hasA=v.includes(a.id),hasB=v.includes(b.id);
+        if(hasA||hasB)either++;
+        if(hasA&&hasB)both++;
+      });
+      if(either<2)continue;
+      const rate=both/either;
+      if(!best||rate>best.rate)best={a,b,rate};
+    }
+  }
+  if(!best||best.rate<0.4)return null;
+  return best;
+}
+function recordCompletionTime(habitId){
+  const k=today();
+  const now=new Date();
+  ST.logTimes=ST.logTimes||{};
+  ST.logTimes[k]=ST.logTimes[k]||{};
+  ST.logTimes[k][habitId]=now.getHours()*60+now.getMinutes();
+  LS.set('logTimes',ST.logTimes);
+}
+function avgCompletionTime(){
+  const times=[];
+  Object.values(ST.logTimes||{}).forEach(day=>Object.values(day).forEach(m=>times.push(m)));
+  if(!times.length)return'—';
+  const avg=Math.round(times.reduce((a,b)=>a+b,0)/times.length);
+  const hh=String(Math.floor(avg/60)).padStart(2,'0'),mm=String(avg%60).padStart(2,'0');
+  return`${hh}:${mm}`;
+}
+function bestWeekday(){
+  const DS=ST.lang==='am'?DAYS_AM:DAYS_EN;
+  const sums=[0,0,0,0,0,0,0],counts=[0,0,0,0,0,0,0];
+  Object.entries(ST.logs).forEach(([k,v])=>{
+    if(!v)return;
+    const[y,m,d]=k.split('-').map(Number);
+    const day=new Date(y,m-1,d).getDay();
+    sums[day]+=v.length;counts[day]++;
+  });
+  const avgs=sums.map((s,i)=>counts[i]?s/counts[i]:0);
+  const best=avgs.indexOf(Math.max(...avgs));
+  if(Math.max(...avgs)===0)return'—';
+  return DS[best];
+}
+function aiInsightText(){
+  const am=ST.lang==='am';
+  const rate=compRate(),str=calcStreak(),longest=calcLongest(),bd=bestWeekday();
+  if(!Object.keys(ST.logs).length)return am?'ገና በቂ ዳታ የለም — ልማዶችን መከታተል ስትጀምር ትንታኔ እናሳይሃለን።':'Not enough data yet — insights appear once you start logging habits.';
+  if(rate>=80)return am?`🔥 በጣም ጥሩ! የ${rate}% ማጠናቀቅ መጠን አለህ። ${bd!=='—'?bd+' ላይ በጣም ጠንካራ ትሆናለህ።':''}`:`🔥 Excellent! You're completing ${rate}% of habits. ${bd!=='—'?'You perform best on '+bd+'s.':''}`;
+  if(str===0&&longest>0)return am?`ያለፈው ምርጥ streak ${longest} ቀን ነበር። ዛሬ ደግመህ ጀምር — አንድ ቀን ብቻ ይበቃል!`:`Your best streak was ${longest} days. Start fresh today — one day is enough to restart momentum!`;
+  return am?`የ${rate}% ማጠናቀቅ መጠን አለህ፣ ${bd!=='—'?bd+' ላይ ትበልጣለህ። ':''}ትንሽ ብታሻሽል ውጤቱ ይታያል።`:`You're at ${rate}% completion${bd!=='—'?', strongest on '+bd+'s':''}. Small consistent improvements will show soon.`;
+}
+function buildCharts(){
+  const t=T();
+  const days=ST.chartRange==='weekly'?7:ST.chartRange==='yearly'?365:30;
+  const DS=ST.lang==='am'?DAYS_S_AM:DAYS_S_EN;
+  const data=Array.from({length:ST.chartRange==='yearly'?12:days}).map((_,i)=>{
+    if(ST.chartRange==='yearly'){
+      const d=new Date();d.setMonth(d.getMonth()-(11-i));
+      const mLabel=(ST.lang==='am'?MONTHS_AM:MONTHS_EN)[d.getMonth()];
+      const cnt=Object.entries(ST.logs).reduce((a,[k,v])=>{const[y,m]=k.split('-').map(Number);return(y===d.getFullYear()&&m-1===d.getMonth())?a+(v?.length||0):a;},0);
+      return{label:mLabel,pct:ST.habits.length?Math.min(100,Math.round((cnt/(ST.habits.length*30))*100)):0,xp:Object.entries(ST.xpLog).reduce((a,[k,v])=>{const[y,m]=k.split('-').map(Number);return(y===d.getFullYear()&&m-1===d.getMonth())?a+v:a;},0)};
+    }
+    const d=new Date();d.setDate(d.getDate()-(days-1-i));
+    const k=dk(d);
+    return{label:ST.chartRange==='weekly'?DS[d.getDay()]:String(d.getDate()),pct:ST.habits.length?Math.round(((ST.logs[k]||[]).length/ST.habits.length)*100):0,xp:ST.xpLog[k]||0};
+  });
+  const maxXp=Math.max(1,...data.map(d=>d.xp));
+
+  return div({},[
+    buildHeatmap(),
+    div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+      div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}},[
+        div({style:{fontSize:'14px',fontWeight:'700'}},`📈 ${L('charts')}`),
+        div({style:{display:'flex',gap:'6px',background:t.SB,borderRadius:'10px',padding:'3px'}},[
+          btn({style:{padding:'5px 12px',borderRadius:'8px',border:'none',fontSize:'11px',cursor:'pointer',background:ST.chartRange==='weekly'?t.AC:'transparent',color:ST.chartRange==='weekly'?'#0D0D0D':t.DM,fontWeight:'600'},onclick(){ST.chartRange='weekly';render();}},L('weekly')),
+          btn({style:{padding:'5px 12px',borderRadius:'8px',border:'none',fontSize:'11px',cursor:'pointer',background:ST.chartRange==='monthly'?t.AC:'transparent',color:ST.chartRange==='monthly'?'#0D0D0D':t.DM,fontWeight:'600'},onclick(){ST.chartRange='monthly';render();}},L('monthly')),
+          btn({style:{padding:'5px 12px',borderRadius:'8px',border:'none',fontSize:'11px',cursor:'pointer',background:ST.chartRange==='yearly'?t.AC:'transparent',color:ST.chartRange==='yearly'?'#0D0D0D':t.DM,fontWeight:'600'},onclick(){ST.chartRange='yearly';render();}},L('yearly')),
+        ]),
+      ]),
+      div({style:{fontSize:'12px',fontWeight:'600',marginBottom:'8px',color:t.DM}},L('completion')),
+      div({style:{display:'flex',gap:ST.chartRange==='weekly'?'5px':'2px',alignItems:'flex-end',height:'70px',marginBottom:'18px'}},
+        data.map(d=>div({style:{flex:'1',display:'flex',flexDirection:'column',alignItems:'center',gap:'3px'}},[
+          div({class:'lm-bar','data-target':`${Math.max(2,(d.pct/100)*64)}px`,style:{width:'100%',height:'0px',background:d.pct===100?t.AC:d.pct>0?t.AC+'77':t.MU,borderRadius:'3px'}}),
+          (ST.chartRange==='weekly'||ST.chartRange==='yearly')?div({style:{fontSize:'9px',color:t.DM}},d.label):null,
+        ]))
+      ),
+      div({style:{fontSize:'12px',fontWeight:'600',marginBottom:'8px',color:t.DM}},L('xpChart')),
+      div({style:{display:'flex',gap:ST.chartRange==='weekly'?'5px':'2px',alignItems:'flex-end',height:'60px'}},
+        data.map(d=>div({style:{flex:'1',display:'flex',flexDirection:'column',alignItems:'center',gap:'3px'}},[
+          div({class:'lm-bar','data-target':`${Math.max(2,(d.xp/maxXp)*54)}px`,style:{width:'100%',height:'0px',background:'#A78BFA88',borderRadius:'3px'}}),
+          (ST.chartRange==='weekly'||ST.chartRange==='yearly')?div({style:{fontSize:'9px',color:t.DM}},d.label):null,
+        ]))
+      ),
+    ]),
+    div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'14px'}},L('advStats')),
+      div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},[
+        ['✅',L('compRate'),`${compRate()}%`],
+        ['🔥',L('longStreak'),String(calcLongest())],
+        ['📅',L('bestMonth'),bestMonth()],
+        ['📈',L('totalDays'),String(Object.values(ST.logs).filter(a=>a&&a.length>0).length)],
+      ].map(([ic,lb,vl])=>div({style:{background:t.SB,borderRadius:'14px',padding:'14px'}},[
+        div({style:{fontSize:'22px'}},ic),
+        div({style:{fontSize:'17px',fontWeight:'700',color:t.AC,marginTop:'4px'}},vl),
+        div({style:{fontSize:'10px',color:t.DM}},lb),
+      ]))),
+    ]),
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'14px'}},L('insights')),
+      div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'14px'}},[
+        ['📅',L('bestDay'),bestWeekday()],
+        ['⚡',L('currentStreak'),String(calcStreak())],
+      ].map(([ic,lb,vl])=>div({style:{background:t.SB,borderRadius:'14px',padding:'14px'}},[
+        div({style:{fontSize:'22px'}},ic),
+        div({style:{fontSize:'17px',fontWeight:'700',color:t.AC,marginTop:'4px'}},vl),
+        div({style:{fontSize:'10px',color:t.DM}},lb),
+      ]))),
+      div({style:{background:t.SB,borderRadius:'14px',padding:'14px',fontSize:'12px',color:t.TX,lineHeight:'1.6'}},[
+        div({style:{fontSize:'11px',fontWeight:'700',color:t.AC,marginBottom:'6px'}},L('aiInsight')),
+        aiInsightText(),
+      ]),
+    ]),
+    (()=>{
+      const trend=monthlyTrend();
+      const pred=successPrediction();
+      const corr=habitCorrelation();
+      const trendIcon=trend.dir==='up'?'📈':trend.dir==='down'?'📉':'➡️';
+      const trendTxt=trend.dir==='flat'?(ST.lang==='am'?'የተረጋጋ':'Stable'):`${trend.pct>0?'+':''}${trend.pct}%`;
+      return div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+        div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'14px'}},L('advAnalytics')),
+        div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'12px'}},[
+          ['😴',L('worstDay'),worstWeekday()],
+          [trendIcon,L('monthTrend'),trendTxt],
+          ['🔮',L('successPred'),`${pred}%`],
+          ['⏰',L('avgTime'),avgCompletionTime()],
+        ].map(([ic,lb,vl])=>div({style:{background:t.SB,borderRadius:'14px',padding:'14px'}},[
+          div({style:{fontSize:'20px'}},ic),
+          div({style:{fontSize:'15px',fontWeight:'700',color:t.AC,marginTop:'4px'}},vl),
+          div({style:{fontSize:'10px',color:t.DM}},lb),
+        ]))),
+        corr?div({style:{background:t.SB,borderRadius:'14px',padding:'14px',fontSize:'12px',color:t.TX,lineHeight:'1.6'}},[
+          div({style:{fontSize:'11px',fontWeight:'700',color:t.AC,marginBottom:'6px'}},'🔗 '+L('habitCorr')),
+          ST.lang==='am'?`"${corr.a.name}" እና "${corr.b.name}" ${Math.round(corr.rate*100)}% ጊዜ አብረው ይጠናቀቃሉ።`:`"${corr.a.name}" and "${corr.b.name}" are completed together ${Math.round(corr.rate*100)}% of the time.`,
+        ]):null,
+      ]);
+    })(),
+  ]);
+}
+
+// ── FOCUS MODE (Pomodoro) ────────────────────────────────────────
+function buildFocus(){
+  const t=T();
+  const f=ST.focus;
+  const mm=String(Math.floor(f.remaining/60)).padStart(2,'0');
+  const ss=String(f.remaining%60).padStart(2,'0');
+  const totalSec=Math.max(1,(f.mode==='work'?f.workMin:f.breakMin)*60);
+  const pct=1-(f.remaining/totalSec);
+  return div({},[
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'22px',padding:'26px 20px',marginBottom:'14px',textAlign:'center'}},[
+      div({style:{fontSize:'12px',fontWeight:'700',color:t.DM,marginBottom:'16px',letterSpacing:'1.5px'}},f.mode==='work'?`🧠 ${L('focusWork').toUpperCase()}`:`☕ ${L('focusBreak').toUpperCase()}`),
+      div({style:{display:'flex',justifyContent:'center',marginBottom:'18px',animation:f.running?'ringPulse 2s ease-in-out infinite':'none'}},[
+        buildRing(pct,190,t.AC,t.MU,`${mm}:${ss}`)
+      ]),
+      div({style:{display:'flex',gap:'10px',justifyContent:'center'}},[
+        btn({style:{padding:'14px 30px',borderRadius:'18px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'800',fontSize:'14px'},onclick(){
+          haptic(12);f.running=!f.running;render();
+        }},f.running?'⏸ '+L('focusPause'):'▶ '+L('focusStart')),
+        btn({style:{padding:'14px 22px',borderRadius:'18px',border:`1px solid ${t.MU}`,background:'transparent',color:t.TX,fontWeight:'600',fontSize:'14px'},onclick(){
+          haptic(10);f.running=false;f.mode='work';f.remaining=f.workMin*60;render();
+        }},'↺ '+L('focusReset')),
+      ]),
+    ]),
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},L('focusTitle')),
+      div({style:{display:'flex',gap:'10px'}},[
+        div({style:{flex:'1'}},[
+          div({style:{fontSize:'11px',color:t.DM,marginBottom:'6px'}},L('focusWorkLen')),
+          inp({type:'number',min:'1',max:'120',value:String(f.workMin),style:{width:'100%',padding:'10px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none'},oninput(e){
+            const v=Math.max(1,Math.min(120,parseInt(e.target.value)||25));f.workMin=v;LS.set('focusWorkMin',v);
+            if(f.mode==='work'&&!f.running)f.remaining=v*60;
+          }}),
+        ]),
+        div({style:{flex:'1'}},[
+          div({style:{fontSize:'11px',color:t.DM,marginBottom:'6px'}},L('focusBreakLen')),
+          inp({type:'number',min:'1',max:'60',value:String(f.breakMin),style:{width:'100%',padding:'10px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none'},oninput(e){
+            const v=Math.max(1,Math.min(60,parseInt(e.target.value)||5));f.breakMin=v;LS.set('focusBreakMin',v);
+            if(f.mode==='break'&&!f.running)f.remaining=v*60;
+          }}),
+        ]),
+      ]),
+    ]),
+    div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},[
+      ['🔥',`${L('focusToday')} ${L('focusSessions')}`,String(f.sessionsToday)],
+      ['⭐',`${L('focusTotal')} ${L('focusSessions')}`,String(f.totalSessions)],
+    ].map(([ic,lb,vl])=>div({class:'lm-card',style:{background:t.CARD,borderRadius:'16px',padding:'16px',textAlign:'center'}},[
+      div({style:{fontSize:'22px'}},ic),
+      div({style:{fontSize:'19px',fontWeight:'800',color:t.AC,marginTop:'4px'}},vl),
+      div({style:{fontSize:'10px',color:t.DM}},lb),
+    ]))),
+  ]);
+}
+
+// ── AI COACH ─────────────────────────────────────────────────────
+function personaNotes(){
+  const g=ST.profile.gender;
+  const genderNote=ST.lang==='am'
+    ?(g==='female'?' ተጠቃሚው ሴት ናት — ሁሉንም ግሶች እና አድራሻ በሴት ጾታ (ለምሳሌ፦ ጀምረሻል፣ ትችያለሽ፣ አንቺ) ጻፍ።':' ተጠቃሚው ወንድ ነው — ሁሉንም ግሶች እና አድራሻ በወንድ ጾታ (ለምሳሌ፦ ጀምረሃል፣ ትችላለህ፣ አንተ) ጻፍ። በምንም ሁኔታ የሴት ጾታ ግስ (ለምሳሌ ጀምረሻል፣ ትችያለሽ) አትጠቀም።')
+    :'';
+  const nameNote=ST.profile.name?(ST.lang==='am'?` ተጠቃሚውን በስሙ ${ST.profile.name} ጥራው/ጥሪው።`:` Address the user by name, ${ST.profile.name}.`):'';
+  return genderNote+nameNote;
+}
+function habitContext(){
+  const str=calcStreak(),worst=worstWeekday(),best=bestWeekday(),corr=habitCorrelation(),trend=monthlyTrend(),rate=compRate();
+  if(ST.lang==='am'){
+    return `ልማዶች: ${ST.habits.map(h=>h.name).join(', ')||'ምንም'}. ዛሬ: ${done().length}/${ST.habits.length}. የአሁኑ streak: ${str} ቀን። ምርጥ streak፡ ${calcLongest()} ቀን። የማጠናቀቅ መጠን፡ ${rate}%። ምርጥ ቀን፡ ${best}። ደካማ ቀን፡ ${worst}። ወርሃዊ አዝማሚያ፡ ${trend.dir==='up'?'እየጨመረ':trend.dir==='down'?'እየቀነሰ':'ተመሳሳይ'} (${trend.pct}%)። ${corr?`${corr.a.name} እና ${corr.b.name} አብረው የመሰራት አዝማሚያ አላቸው። `:''}XP: ${ST.xp}. ግቦች፡ ሳምንታዊ ${ST.goals.weekly||0}, ወራዊ ${ST.goals.monthly||0}, ዓመታዊ ${ST.goals.yearly||0}.`;
+  }
+  return `Habits: ${ST.habits.map(h=>h.name).join(', ')||'none'}. Today: ${done().length}/${ST.habits.length}. Current streak: ${str} days. Best streak: ${calcLongest()} days. Completion rate: ${rate}%. Best day: ${best}. Weakest day: ${worst}. Monthly trend: ${trend.dir} (${trend.pct}%). ${corr?`${corr.a.name} and ${corr.b.name} tend to be done together. `:''}XP: ${ST.xp}. Goals: weekly ${ST.goals.weekly||0}, monthly ${ST.goals.monthly||0}, yearly ${ST.goals.yearly||0}.`;
+}
+const AI_MODES=[
+  ['daily','📅','aiDaily'],['weekly','📊','aiWeekly'],['predict','🔮','aiPredict'],['goal','🎯','aiGoalPlan'],
+  ['schedule','⏰','aiSchedule'],['recovery','🩹','aiRecovery'],
+  ['challenge','🎲','aiChallenge'],['motivate','💬','aiMotivate'],
+];
+function modeSystemPrompt(mode){
+  const am=ST.lang==='am';
+  const base=am?'አንተ የ«ልማድ» መተግበሪያ ውስጥ ያለ የግል የልማድ አሠልጣኝ ነህ።':'You are the personal habit coach inside the "LIMAD" app.';
+  const rules=am?' መልስህ ከ20 እስከ 200 ቃላት መካከል ይሁን፣ emoji ተጠቀም።':' Keep your response between 20 and 200 words, and use emoji.';
+  const tasks={
+    daily:am?' ለተጠቃሚው ዛሬ ላይ ትኩረት ያደረገ አጭር አበረታች ምክር ስጥ።':' Give short, motivating advice focused specifically on today.',
+    weekly:am?' የተጠቃሚውን የቅርብ ጊዜ መረጃ በመመርመር ሳምንታዊ ግምገማ (weekly review) ስጥ፦ ምን ጎዘ፣ የትኞቹ ቀናት ላይ ተቸገረ፣ ለምን streak ሊሰበር እንደሚችል ግለጽ፣ እና ለሚቀጥለው ሳምንት 1-2 ተግባራዊ ምክር ስጥ።':' Analyze the recent data and give a weekly review: what went well, which days were weak, explain why streaks might be breaking, and give 1-2 practical tips for next week.',
+    predict:am?' በአሁኑ የማጠናቀቅ መጠን፣ streak፣ እና አዝማሚያ ተመስርተህ ለሚቀጥሉት 30 ቀናት ትንበያ (prediction) ስጥ፦ የትኞቹ ልማዶች የመቆም አደጋ እንዳለባቸው ግለጽ፣ ለምን፣ እና አደጋውን ለመቀነስ 1 ተግባራዊ እርምጃ ጠቁም።':' Based on current completion rate, streak, and trend, give a 30-day prediction: identify which habits are at risk of being dropped, why, and suggest 1 practical action to reduce that risk.',
+    goal:am?' በአሁኑ ልማዶች እና ታሪክ መሠረት ተጨባጭ ሳምንታዊ፣ ወርሃዊ እና ዓመታዊ ግብ (ቁጥር) አቅርብ፣ ለምን እነዚያ ቁጥሮች እንደሚስማሙ በአጭሩ አስረዳ።':' Based on current habits and history, propose concrete weekly, monthly, and yearly numeric targets, and briefly explain why those numbers fit.',
+    schedule:am?' ልማዶቹ በየትኛው የቀኑ ክፍል (ጠዋት/ከሰዓት/ማታ) ቢደረጉ የተሻለ እንደሚሆኑ ጠቁም፣ በምርጥ/ደካማ ቀናት ላይ ተመስርተህ ምክንያት ስጥ፣ እና ከዚያ ባጭሩ ከጠዋት እስከ ማታ የተከፋፈለ ተጨባጭ የዕለት የጊዜ ሰሌዳ (time-blocked plan) በሰዓት ጨምር (ለምሳሌ 7፡00 - ...)።':' Suggest what time of day (morning/afternoon/evening) each habit is best scheduled, giving reasons based on the best/weak days, then add a brief hour-by-hour time-blocked daily plan (e.g. 7:00 - ...).',
+    recovery:am?' የተጠቃሚው streak ከተሰበረ ወይም ደካማ ከሆነ ደረጃ በደረጃ ትንሽ ሊሰራ የሚችል የመልሶ ማግኛ እቅድ (recovery plan) አቅርብ፣ ተስፋ የሚሰጥ ቃና ተጠቀም። streak ካልተሰበረ አሁን ያለውን momentum እንዲቀጥል አበረታታ።':' If the user\'s streak recently broke or is weak, give a small, step-by-step recovery plan in an encouraging tone. If the streak is intact, encourage them to keep the momentum going.',
+    challenge:am?' ለተጠቃሚው አንድ አዲስ፣ ትንሽ (ከ5 እስከ 30 ደቂቃ የሚወስድ) የዛሬ ፈተና (daily challenge) ብቻ በ1 አጭር ዓረፍተ ነገር አቅርብ፣ ተጨማሪ ማብራሪያ ወይም መግቢያ አትስጥ።':' Give ONLY one short (1 sentence) new daily challenge for today, doable in 5-30 minutes. No extra explanation or preamble.',
+    motivate:am?' በ1-2 ዓረፍተ ነገር ብቻ ኃይለኛ የማነቃቂያ መልእክት ስጥ (ከ15-40 ቃላት)፣ ተጨማሪ ማብራሪያ አትስጥ።':' Give only 1-2 sentences of a powerful motivational message (15-40 words). No extra explanation.',
+  };
+  const skipRules=mode==='challenge'||mode==='motivate';
+  return base+tasks[mode]+(skipRules?'':rules)+personaNotes();
+}
+function modeLocalFallback(mode){
+  const am=ST.lang==='am';
+  if(mode==='weekly'){
+    const w=worstWeekday(),b=bestWeekday(),tr=monthlyTrend();
+    return am?`📊 የማጠናቀቅ መጠንህ ${compRate()}% ነው። ${b!=='—'?b+' ላይ ትበረታለህ፣ ':''}${w!=='—'?w+' ላይ ትዳከማለህ።':''} ወርሃዊ አዝማሚያ፡ ${tr.dir==='up'?'እየተሻሻለ ነው 📈':tr.dir==='down'?'እየቀነሰ ነው 📉':'ተመሳሳይ ነው።'}`:`📊 Your completion rate is ${compRate()}%. ${b!=='—'?'You perform best on '+b+'s, ':''}${w!=='—'?'and weakest on '+w+'s.':''} Monthly trend: ${tr.dir==='up'?'improving 📈':tr.dir==='down'?'declining 📉':'steady.'}`;
+  }
+  if(mode==='goal'){
+    const s=Math.max(ST.habits.length*4,7);
+    return am?`🎯 እንደ አጀማመርህ፣ ሳምንታዊ ${s} ማጠናቀቂያ ግብ ብትይዝ ተመጣጣኝ ነው። Goals ትር ላይ አስተካክል።`:`🎯 Based on your pace, a weekly target of ${s} completions looks reasonable. Adjust it in the Goals tab.`;
+  }
+  if(mode==='schedule'){
+    const b=bestWeekday();
+    return am?(b!=='—'?`⏰ ${b} ላይ በጣም ንቁ ትሆናለህ — ተመሳሳይ ሰዓት በሌሎች ቀናትም ተጠቀም። 🗓️ ጠዋት፦ ልማዶች፣ ከሰዓት፦ Focus session፣ ማታ፦ ግምገማ።`:'⏰ ገና በቂ ዳታ የለም።'):(b!=='—'?`⏰ You're most active on ${b}s — try that time on other days too. 🗓️ Morning: habits, afternoon: Focus session, evening: review.`:'⏰ Not enough data yet.');
+  }
+  if(mode==='recovery'){
+    const str=calcStreak(),longest=calcLongest();
+    if(am)return str===0&&longest>0?`🩹 ያለፈው ምርጥ streak ${longest} ቀን ነበር። ዛሬ አንድ ትንሽ ልማድ ብቻ ጨርስ፣ ነገ ሁለተኛ ጨምር፣ ቀስ በቀስ ተመለስ።`:`🩹 አሁን ${str} ቀን ተከታታይ ላይ ነህ፣ ይቀጥል!`;
+    return str===0&&longest>0?`🩹 Your best streak was ${longest} days. Finish just one small habit today, add another tomorrow — rebuild gradually.`:`🩹 You're on a ${str}-day streak — keep it going!`;
+  }
+  if(mode==='predict'){
+    const pred=successPrediction(),w=worstWeekday();
+    return am?`🔮 የ30-ቀን ስኬት ትንበያህ ${pred}% ነው። ${w!=='—'?w+' ላይ ትልቁ አደጋ አለ — ትኩረት ስጥ።':'ተጨማሪ ዳታ ሲኖር ትክክለኛ ትንበያ ይሻሻላል።'}`:`🔮 Your 30-day success prediction is ${pred}%. ${w!=='—'?'Highest risk day is '+w+' — watch out for it.':'More data will sharpen this prediction.'}`;
+  }
+  if(mode==='challenge'){const list=am?CH_AM:CH_EN;return list[Math.floor(Math.random()*list.length)];}
+  return localCoachMessage();
+}
+function applyAIChallenge(text){
+  if(!text)return;
+  let c=text.trim().split('\n')[0].replace(/^["'*\-•]+|["'*]+$/g,'').trim();
+  if(c.length>140)c=c.slice(0,140)+'…';
+  if(!c)return;
+  ST.challenge=c;ST.challengeDate=today();ST.challengeDone=false;
+  LS.set('challenge',c);LS.set('challengeDate',today());LS.set('challengeDoneDate',null);
+}
+function buildAI(){
+  const t=T();
+  if(!window._aiState)window._aiState={mode:null,msg:'',loading:false,asked:false,offline:false,noEndpoint:false};
+  const ai=window._aiState;
+
+  async function ask(mode){
+    ai.mode=mode;ai.loading=true;ai.asked=true;render();
+    if(typeof navigator!=='undefined'&&!navigator.onLine){
+      ai.msg=modeLocalFallback(mode);ai.offline=true;ai.loading=false;
+      if(mode==='challenge')applyAIChallenge(ai.msg);
+      render();return;
+    }
+    if(!ST.aiEndpoint){
+      ai.msg=modeLocalFallback(mode);ai.offline=false;ai.noEndpoint=true;ai.loading=false;
+      if(mode==='challenge')applyAIChallenge(ai.msg);
+      render();return;
+    }
+    ai.offline=false;ai.noEndpoint=false;
+    try{
+      const sysP=modeSystemPrompt(mode);
+      const uMsg=habitContext();
+      const r=await fetch(ST.aiEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:sysP,messages:[{role:'user',content:uMsg}]})});
+      const data=await r.json();
+      ai.msg=data.content?.[0]?.text||modeLocalFallback(mode);
+    }catch{ai.msg=modeLocalFallback(mode);ai.offline=true;}
+    ai.loading=false;
+    if(mode==='challenge')applyAIChallenge(ai.msg);
+    render();
+  }
+
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'20px',marginBottom:'14px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`🤖 ${L('aiCoach')}`),
+    !ai.asked?div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},
+      AI_MODES.map(([mode,ic,lk])=>btn({style:{padding:'16px 8px',borderRadius:'16px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,textAlign:'center'},onclick(){haptic(10);ask(mode);}},[
+        div({style:{fontSize:'24px',marginBottom:'6px'}},ic),
+        div({style:{fontSize:'11px',fontWeight:'600',lineHeight:'1.3'}},L(lk)),
+      ]))
+    ):
+    ai.loading?div({},[
+      div({class:'lm-skeleton',style:{height:'14px',width:'70%',marginBottom:'8px'}}),
+      div({class:'lm-skeleton',style:{height:'14px',width:'95%',marginBottom:'8px'}}),
+      div({class:'lm-skeleton',style:{height:'14px',width:'85%',marginBottom:'8px'}}),
+      div({class:'lm-skeleton',style:{height:'14px',width:'60%'}}),
+      div({style:{color:t.DM,textAlign:'center',padding:'10px 0 0',fontSize:'11px'}},`⏳ ${L('thinking')}`),
+    ]):
+    div({},[
+      div({style:{fontSize:'14px',lineHeight:'1.8',background:t.SB,padding:'14px',borderRadius:'14px',borderLeft:`3px solid ${t.AC}`}},ai.msg),
+      ai.offline?div({style:{fontSize:'10px',color:t.DM,marginTop:'8px',lineHeight:'1.5'}},`📡 ${L('offlineAiNote')}`):null,
+      ai.noEndpoint?div({style:{fontSize:'10px',color:t.DM,marginTop:'8px',lineHeight:'1.5'}},ST.lang==='am'?'⚙️ ሙሉ AI ለማግኘት Settings → AI Coach Endpoint ላይ worker URL አስገባ።':'⚙️ For the full AI, add your worker URL in Settings → AI Coach Endpoint.'):null,
+      div({style:{display:'flex',gap:'8px',marginTop:'10px'}},[
+        btn({style:{flex:'1',padding:'9px',borderRadius:'10px',border:`1px solid ${t.MU}`,background:'transparent',color:t.DM,fontSize:'12px'},onclick(){ai.asked=false;ai.msg='';render();}},'← '+L('aiMenu')),
+        btn({style:{flex:'1',padding:'9px',borderRadius:'10px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontSize:'12px',fontWeight:'600'},onclick(){ask(ai.mode);}},L('askAgain')),
+      ]),
+    ]),
+    ST.lang==='am'?div({style:{fontSize:'10px',color:t.DM,marginTop:'12px',lineHeight:'1.5'}},'ማስታወሻ፦ AI ባህሪዎች ኢንተርኔት ይፈልጋሉ (claude.ai API)። ያለ ኢንተርኔት local ስሪት ይሠራል።'):
+    div({style:{fontSize:'10px',color:t.DM,marginTop:'12px',lineHeight:'1.5'}},'Note: AI features need internet (claude.ai API). A local fallback runs offline.'),
+  ]);
+}
+
+// ── AWARDS ────────────────────────────────────────────────────────
+// ── REWARDS / GAMIFICATION SHOP ──────────────────────────────────
+function openMysteryBox(){
+  const roll=Math.random();
+  if(roll<0.45){
+    const amt=10+Math.floor(Math.random()*40);
+    ST.coins+=amt;LS.set('coins',ST.coins);
+    return{icon:'🪙',text:ST.lang==='am'?`${amt} ኮይን!`:`${amt} coins!`};
+  }
+  if(roll<0.75){
+    const amt=10+Math.floor(Math.random()*30);
+    ST.xp+=amt;LS.set('xp',ST.xp);
+    return{icon:'⭐',text:`${amt} XP!`};
+  }
+  if(roll<0.92){
+    const locked=Object.keys(THEME_COST).filter(k=>!ST.unlockedThemes.includes(k));
+    if(locked.length){
+      const th=locked[Math.floor(Math.random()*locked.length)];
+      ST.unlockedThemes=[...ST.unlockedThemes,th];LS.set('unlockedThemes',ST.unlockedThemes);
+      return{icon:'🎨',text:(ST.lang==='am'?'አዲስ ገጽታ፦ ':'New theme: ')+THEMES[th].n};
+    }
+  }
+  const lockedAv=PREMIUM_AVATARS.filter(([a])=>!ST.unlockedAvatars.includes(a));
+  if(lockedAv.length){
+    const[av]=lockedAv[Math.floor(Math.random()*lockedAv.length)];
+    ST.unlockedAvatars=[...ST.unlockedAvatars,av];LS.set('unlockedAvatars',ST.unlockedAvatars);
+    return{icon:av,text:ST.lang==='am'?'አዲስ Avatar!':'New avatar!'};
+  }
+  const amt=30;ST.coins+=amt;LS.set('coins',ST.coins);
+  return{icon:'🪙',text:`${amt} coins!`};
+}
+function buildRewards(){
+  const t=T();
+  if(!window._boxState)window._boxState={result:null,opening:false};
+  const bx=window._boxState;
+  const canClaim=ST.lastRewardClaim!==today();
+  const rewardCoins=10+Math.min(ST.loginStreak,10)*3;
+  return div({},[
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px',textAlign:'center'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'10px'}},L('dailyReward')),
+      div({style:{fontSize:'11px',color:t.DM,marginBottom:'12px'}},(ST.lang==='am'?'ተከታታይ ግባ፡ ':'Login streak: ')+ST.loginStreak+(ST.lang==='am'?' ቀን':' days')),
+      canClaim?btn({style:{padding:'13px 28px',borderRadius:'16px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'800',fontSize:'14px'},onclick(){
+        haptic(20);ST.coins+=rewardCoins;ST.xp+=5;LS.set('coins',ST.coins);LS.set('xp',ST.xp);
+        ST.lastRewardClaim=today();LS.set('lastRewardClaim',today());
+        showFlash(`🎁 +${rewardCoins} 🪙 +5 XP`);render();
+      }},`🎁 ${L('claimReward')} (+${rewardCoins} 🪙)`):
+      div({style:{color:t.DM,fontSize:'13px'}},`✓ ${L('claimed')} — ${L('comeBackTomorrow')}`),
+    ]),
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px',textAlign:'center'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'10px'}},L('mysteryBox')),
+      div({style:{fontSize:'40px',marginBottom:'10px',animation:bx.opening?'popIn .4s ease':'none'}},bx.result?bx.result.icon:'🎁'),
+      bx.result?div({style:{fontSize:'13px',fontWeight:'700',color:t.AC,marginBottom:'10px'}},L('youWon')+': '+bx.result.text):null,
+      btn({style:{padding:'12px 26px',borderRadius:'16px',border:'none',background:ST.coins>=MYSTERY_BOX_COST?t.AC:t.MU,color:'#0D0D0D',fontWeight:'800',fontSize:'13px'},onclick(){
+        if(ST.coins<MYSTERY_BOX_COST){showFlash('🪙 '+L('notEnoughCoins'));render();return;}
+        haptic([10,20,10,20,30]);ST.coins-=MYSTERY_BOX_COST;LS.set('coins',ST.coins);
+        bx.opening=true;render();
+        setTimeout(()=>{bx.result=openMysteryBox();bx.opening=false;render();},600);
+      }},`${L('openBox')} (${MYSTERY_BOX_COST} 🪙)`),
+    ]),
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},L('shopThemes')),
+      div({style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}},
+        Object.entries(THEMES).map(([k,th])=>{
+          const unlocked=ST.unlockedThemes.includes(k);
+          const cost=THEME_COST[k]||0;
+          return div({style:{aspectRatio:'1',borderRadius:'14px',border:`2px solid ${ST.theme===k?th.AC:'transparent'}`,background:th.BG,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'2px',position:'relative',opacity:unlocked?'1':'.55'},onclick(){
+            haptic(10);
+            if(unlocked){ST.theme=k;LS.set('theme',k);render();return;}
+            if(ST.coins>=cost){ST.coins-=cost;LS.set('coins',ST.coins);ST.unlockedThemes=[...ST.unlockedThemes,k];LS.set('unlockedThemes',ST.unlockedThemes);ST.theme=k;LS.set('theme',k);showFlash('🎨 '+L('unlocked2'));render();}
+            else{showFlash('🪙 '+L('notEnoughCoins'));render();}
+          }},[
+            div({style:{width:'16px',height:'16px',borderRadius:'50%',background:th.AC}}),
+            div({style:{fontSize:'8px',color:'#fff'}},unlocked?th.n:`🔒${cost}`),
+          ]);
+        }))
+    ]),
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},L('shopAvatars')),
+      div({style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}},
+        PREMIUM_AVATARS.map(([a,cost])=>{
+          const unlocked=ST.unlockedAvatars.includes(a);
+          return div({style:{aspectRatio:'1',borderRadius:'14px',background:t.SB,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:'2px',opacity:unlocked?'1':'.55',border:`2px solid ${(ST.profile.avatar===a)?t.AC:'transparent'}`},onclick(){
+            haptic(10);
+            if(unlocked){ST.profile={...ST.profile,avatar:a};LS.set('profile',ST.profile);render();return;}
+            if(ST.coins>=cost){ST.coins-=cost;LS.set('coins',ST.coins);ST.unlockedAvatars=[...ST.unlockedAvatars,a];LS.set('unlockedAvatars',ST.unlockedAvatars);ST.profile={...ST.profile,avatar:a};LS.set('profile',ST.profile);showFlash('👤 '+L('unlocked2'));render();}
+            else{showFlash('🪙 '+L('notEnoughCoins'));render();}
+          }},[
+            div({style:{fontSize:'22px'}},a),
+            div({style:{fontSize:'9px',color:t.DM}},unlocked?'✓':`🔒${cost}`),
+          ]);
+        }))
+    ]),
+  ]);
+}
+
+function buildMore(){
+  const t=T();
+  const items=[
+    ['charts','📈',L('charts')],
+    ['awards','🏆',L('awards')],
+    ['goals','🎯',L('goals')],
+    ['settings','🎨',ST.lang==='am'?'ገጽታዎች (Themes)':'Themes'],
+    ['profile','👤',L('profile')],
+    ['settings','⚙️',L('settings')],
+  ];
+  return div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}},
+    items.map(([tb,ico,lbl])=>btn({style:{background:t.CARD,border:`1px solid ${t.BD}`,borderRadius:'18px',padding:'22px 10px',display:'flex',flexDirection:'column',alignItems:'center',gap:'8px'},onclick(){
+      haptic(10);ST.tab=tb;render();
+    }},[
+      div({style:{fontSize:'28px'}},ico),
+      div({style:{fontSize:'13px',fontWeight:'600',color:t.TX}},lbl),
+    ]))
+  );
+}
+function buildAwards(){
+  const t=T();
+  const str=calcStreak();
+  const perf=ST.habits.length>0&&done().length===ST.habits.length;
+  const list=[
+    {id:'b3',icon:'🔥',name:ST.lang==='am'?'ሦስት ቀን':'3 Days',desc:ST.lang==='am'?'3 ቀን ተከታታይ':'3 day streak',ok:str>=3,coins:15},
+    {id:'b7',icon:'⚡',name:ST.lang==='am'?'አንድ ሳምንት':'1 Week',desc:ST.lang==='am'?'7 ቀን ተከታታይ':'7 day streak',ok:str>=7,coins:25},
+    {id:'b21',icon:'🌟',name:ST.lang==='am'?'ሦስት ሳምንት':'3 Weeks',desc:ST.lang==='am'?'21 ቀን ተከታታይ':'21 day streak',ok:str>=21,coins:50},
+    {id:'b30',icon:'👑',name:ST.lang==='am'?'አንድ ወር':'1 Month',desc:ST.lang==='am'?'30 ቀን ተከታታይ':'30 day streak',ok:str>=30,coins:80},
+    {id:'h5',icon:'🎯',name:ST.lang==='am'?'5 ልማዶች':'5 Habits',desc:ST.lang==='am'?'5 ልማዶች ጨምር':'Add 5 habits',ok:ST.habits.length>=5,coins:15},
+    {id:'xp500',icon:'💎',name:'500 XP',desc:ST.lang==='am'?'500 XP ክምችት':'Earn 500 XP',ok:ST.xp>=500,coins:30},
+    {id:'perfect',icon:'✨',name:ST.lang==='am'?'ፍጹም ቀን':'Perfect Day',desc:ST.lang==='am'?'ሁሉ ልማዶች ዛሬ':'All habits today',ok:perf,coins:20},
+  ];
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'14px'}},L('badges')),
+    div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},
+      list.map(a=>{
+        const claimed=ST.claimedBadges.includes(a.id);
+        return div({style:{background:a.ok?t.AC+'18':t.SB,border:`1px solid ${a.ok?t.AC+'55':t.BD}`,borderRadius:'14px',padding:'12px 14px',opacity:a.ok?'1':'.4',transition:'all .2s'}},[
+          div({style:{fontSize:'26px',marginBottom:'4px'}},a.icon),
+          div({style:{fontSize:'12px',fontWeight:'700',color:a.ok?t.AC:t.TX}},a.name),
+          div({style:{fontSize:'10px',color:t.DM,marginTop:'2px'}},a.desc),
+          a.ok&&claimed?div({style:{fontSize:'10px',color:t.AC,marginTop:'4px'}},L('unlocked')):null,
+          a.ok&&!claimed?btn({style:{marginTop:'6px',width:'100%',padding:'6px',borderRadius:'8px',border:'none',background:t.AC,color:'#0D0D0D',fontSize:'10px',fontWeight:'700'},onclick(){
+            haptic(15);ST.coins+=a.coins;LS.set('coins',ST.coins);
+            ST.claimedBadges=[...ST.claimedBadges,a.id];LS.set('claimedBadges',ST.claimedBadges);
+            showFlash(`🪙 +${a.coins}`);render();
+          }},`🪙 +${a.coins}`):null,
+        ]);
+      }))
+  ]);
+}
+
+// ── ADD HABIT ─────────────────────────────────────────────────────
+function buildAdd(){
+  const t=T();
+  const CATS=ST.lang==='am'?CATS_AM:CATS_EN;
+  if(!ST.addForm.cat)ST.addForm.cat=CATS[0];
+  return div({},[
+    div({class:'lm-card',style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'14px',border:`1px solid ${t.BD}`}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'4px'}},L('templatesTitle')),
+      div({style:{fontSize:'11px',color:t.DM,marginBottom:'12px'}},L('templatesHint')),
+      div({style:{display:'flex',gap:'10px',overflowX:'auto',paddingBottom:'4px'}},
+        Object.entries(HABIT_TEMPLATES).map(([key,tpl])=>btn({style:{flex:'0 0 auto',minWidth:'92px',padding:'12px 10px',borderRadius:'16px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,textAlign:'center'},onclick(){addTemplate(key);}},[
+          div({style:{fontSize:'24px',marginBottom:'6px'}},tpl.icon),
+          div({style:{fontSize:'10.5px',fontWeight:'600',lineHeight:'1.3'}},tpl.n[ST.lang]||tpl.n.en),
+        ]))
+      ),
+    ]),
+    div({style:{background:t.CARD,borderRadius:'20px',padding:'20px',border:`1px solid ${t.BD}`}},[
+    div({style:{fontSize:'16px',fontWeight:'700',marginBottom:'18px'}},L('newHabit')),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('name')),
+    inp({type:'text',value:ST.addForm.name,placeholder:L('namePH'),style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',marginBottom:'14px'},oninput(e){ST.addForm.name=e.target.value;}}),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'8px'}},L('cat')),
+    div({style:{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'14px'}},
+      CATS.map(c=>btn({style:{padding:'7px 13px',borderRadius:'20px',border:`1px solid ${ST.addForm.cat===c?t.AC:t.MU}`,background:ST.addForm.cat===c?t.AC+'22':'transparent',color:ST.addForm.cat===c?t.AC:t.DM,fontSize:'12px'},onclick(){ST.addForm.cat=c;render();}},c))
+    ),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('notes')),
+    txt({placeholder:L('notesPH'),rows:'2',style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none',resize:'none',marginBottom:'14px'},oninput(e){ST.addForm.notes=e.target.value;}},ST.addForm.notes||''),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('reminder')),
+    inp({type:'time',value:ST.addForm.reminder||'',style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',marginBottom:'18px',colorScheme:'dark'},oninput(e){ST.addForm.reminder=e.target.value;}}),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'8px'}},`🗓 ${L('schedule')}`),
+    div({style:{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:ST.addForm.schedule.type==='everyX'?'10px':'18px'}},
+      [['daily',L('schDaily')],['weekdays',L('schWeekdays')],['weekends',L('schWeekends')],['everyX',L('schEveryX')]].map(([tp,lb])=>
+        btn({style:{padding:'7px 13px',borderRadius:'20px',border:`1px solid ${ST.addForm.schedule.type===tp?t.AC:t.MU}`,background:ST.addForm.schedule.type===tp?t.AC+'22':'transparent',color:ST.addForm.schedule.type===tp?t.AC:t.DM,fontSize:'12px'},onclick(){ST.addForm.schedule={...ST.addForm.schedule,type:tp};render();}},lb)
+      )
+    ),
+    ST.addForm.schedule.type==='everyX'?div({style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'18px'}},[
+      div({style:{fontSize:'12px',color:t.DM}},ST.lang==='am'?'እያንዳንዱ':'Every'),
+      inp({type:'number',min:'2',max:'30',value:String(ST.addForm.schedule.x||2),style:{width:'70px',padding:'10px',borderRadius:'10px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',textAlign:'center'},oninput(e){ST.addForm.schedule={...ST.addForm.schedule,x:Math.max(2,parseInt(e.target.value)||2)};}}),
+      div({style:{fontSize:'12px',color:t.DM}},ST.lang==='am'?'ቀናት':'days'),
+    ]):null,
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'8px'}},L('difficulty')),
+    div({style:{display:'flex',gap:'8px',marginBottom:'18px'}},
+      [['easy','🟢',L('diffEasy')],['medium','🟡',L('diffMedium')],['hard','🔴',L('diffHard')]].map(([dv,ic,lb])=>
+        btn({style:{flex:'1',padding:'10px 6px',borderRadius:'14px',border:`1px solid ${ST.addForm.difficulty===dv?t.AC:t.MU}`,background:ST.addForm.difficulty===dv?t.AC+'22':'transparent',color:ST.addForm.difficulty===dv?t.AC:t.DM,fontSize:'12px',fontWeight:'600',textAlign:'center'},onclick(){ST.addForm.difficulty=dv;render();}},[
+          div({style:{fontSize:'16px',marginBottom:'2px'}},ic),
+          div({},lb),
+          div({style:{fontSize:'9px',opacity:'.75',marginTop:'2px'}},`+${DIFF_XP[dv]}XP`),
+        ])
+      )
+    ),
+    btn({style:{width:'100%',padding:'14px',borderRadius:'14px',border:'none',background:ST.addForm.name.trim()?t.AC:t.MU,color:'#0D0D0D',fontWeight:'700',fontSize:'15px'},onclick(){
+      if(!ST.addForm.name.trim())return;
+      const h={id:Date.now().toString(),name:ST.addForm.name.trim(),cat:ST.addForm.cat||(ST.lang==='am'?CATS_AM:CATS_EN)[0],notes:ST.addForm.notes||'',reminder:ST.addForm.reminder||'',schedule:ST.addForm.schedule||{type:'daily'},difficulty:ST.addForm.difficulty||'medium',createdAt:new Date().toISOString()};
+      ST.habits=[...ST.habits,h];LS.set('habits',ST.habits);
+      if(h.reminder&&Notification&&Notification.permission!=='granted')Notification.requestPermission();
+      ST.addForm={name:'',cat:(ST.lang==='am'?CATS_AM:CATS_EN)[0],notes:'',reminder:'',schedule:{type:'daily',x:2},difficulty:'medium'};
+      ST.tab='home';render();
+    }},L('save')),
+  ])]);
+}
+
+// ── PROFILE ───────────────────────────────────────────────────────
+function buildProfile(){
+  const t=T();
+  const str=calcStreak();
+  return div({style:{background:t.CARD,borderRadius:'20px',padding:'20px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'16px'}},`👤 ${L('profileTitle')}`),
+    div({style:{display:'flex',justifyContent:'center',marginBottom:'12px'}},[
+      div({style:{width:'70px',height:'70px',borderRadius:'50%',background:t.SB,border:`2px solid ${t.AC}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'34px'}},(ST.profile.avatar||AVATARS[0])),
+    ]),
+    div({style:{fontSize:'11px',color:t.DM,marginBottom:'8px',textAlign:'center'}},L('avatarPick')),
+    div({style:{display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center',marginBottom:'16px'}},
+      AVATARS.map(a=>btn({style:{width:'36px',height:'36px',borderRadius:'50%',border:`2px solid ${(ST.profile.avatar||AVATARS[0])===a?t.AC:'transparent'}`,background:t.SB,fontSize:'18px'},onclick(){ST.profile={...ST.profile,avatar:a};LS.set('profile',ST.profile);render();}},a))
+    ),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('username')),
+    inp({type:'text',value:ST.profile.name||'',placeholder:ST.lang==='am'?'ስም...':'Name...',style:{width:'100%',padding:'12px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'14px',outline:'none',marginBottom:'14px'},oninput(e){ST.profile={...ST.profile,name:e.target.value};}}),
+    div({style:{fontSize:'12px',color:t.DM,marginBottom:'6px'}},L('genderLabel')),
+    div({style:{display:'flex',gap:'10px',marginBottom:'14px'}},[
+      btn({style:{flex:'1',padding:'11px',borderRadius:'12px',border:`1px solid ${ST.profile.gender==='male'?t.AC:t.MU}`,background:ST.profile.gender==='male'?t.AC+'18':'transparent',color:ST.profile.gender==='male'?t.AC:t.DM,fontWeight:'600',fontSize:'13px'},onclick(){ST.profile={...ST.profile,gender:'male'};LS.set('profile',ST.profile);render();}},'👨 '+L('genderMale')),
+      btn({style:{flex:'1',padding:'11px',borderRadius:'12px',border:`1px solid ${ST.profile.gender==='female'?t.AC:t.MU}`,background:ST.profile.gender==='female'?t.AC+'18':'transparent',color:ST.profile.gender==='female'?t.AC:t.DM,fontWeight:'600',fontSize:'13px'},onclick(){ST.profile={...ST.profile,gender:'female'};LS.set('profile',ST.profile);render();}},'👩 '+L('genderFemale')),
+    ]),
+    btn({style:{width:'100%',padding:'13px',borderRadius:'14px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'14px',marginBottom:'16px'},onclick(){
+      if(!ST.profile.joinDate)ST.profile.joinDate=new Date().toISOString();
+      LS.set('profile',ST.profile);showFlash('✓ '+(ST.lang==='am'?'ተቀምጧል':'Saved'));
+    }},L('saveProfile')),
+    div({style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px'}},[
+      ['⭐',L('totalXp'),String(ST.xp)],
+      ['🔥',L('bestStreak'),String(calcLongest())],
+      ['📅',L('joinDate'),ST.profile.joinDate?new Date(ST.profile.joinDate).toLocaleDateString():'—'],
+      ['✅',ST.lang==='am'?'ልማዶች':'Habits',String(ST.habits.length)],
+    ].map(([ic,lb,vl])=>div({style:{background:t.SB,borderRadius:'14px',padding:'14px'}},[
+      div({style:{fontSize:'20px'}},ic),
+      div({style:{fontSize:'16px',fontWeight:'700',color:t.AC,marginTop:'4px'}},vl),
+      div({style:{fontSize:'10px',color:t.DM}},lb),
+    ]))),
+  ]);
+}
+
+// ── SETTINGS ─────────────────────────────────────────────────────
+function buildSettings(){
+  const t=T();
+  const nodes=[];
+
+  // Language
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`🌍 ${L('lang')}`),
+    div({style:{display:'flex',gap:'10px'}},[
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${ST.lang==='am'?t.AC:t.MU}`,background:ST.lang==='am'?t.AC+'18':'transparent',color:ST.lang==='am'?t.AC:t.DM,fontWeight:'600',fontSize:'13px'},onclick(){ST.lang='am';LS.set('lang','am');pickChallenge();render();}},ST.lang==='am'?'🇪🇹 አማርኛ ✓':'🇪🇹 አማርኛ'),
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${ST.lang==='en'?t.AC:t.MU}`,background:ST.lang==='en'?t.AC+'18':'transparent',color:ST.lang==='en'?t.AC:t.DM,fontWeight:'600',fontSize:'13px'},onclick(){ST.lang='en';LS.set('lang','en');pickChallenge();render();}},ST.lang==='en'?'🇺🇸 English ✓':'🇺🇸 English'),
+    ]),
+  ]));
+
+  // Theme
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`🎨 ${L('themeChoose')}`),
+    div({style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px'}},
+      Object.entries(THEMES).filter(([k])=>ST.unlockedThemes.includes(k)).map(([k,th])=>btn({title:th.n,style:{aspectRatio:'1',borderRadius:'14px',border:`2px solid ${ST.theme===k?th.AC:'transparent'}`,background:th.BG,display:'flex',alignItems:'center',justifyContent:'center'},onclick(){ST.theme=k;LS.set('theme',k);render();}},
+        div({style:{width:'16px',height:'16px',borderRadius:'50%',background:th.AC,boxShadow:`0 0 10px ${th.AC}88`}})))
+    ),
+    Object.keys(THEMES).length>ST.unlockedThemes.length?div({style:{fontSize:'10px',color:t.DM,marginTop:'10px'}},ST.lang==='am'?'🔒 ተጨማሪ ገጽታዎች — 🎁 Rewards ትር ላይ በኮይን ክፈት':'🔒 More themes — unlock with coins in the 🎁 Rewards tab'):null,
+  ]));
+
+  // Sound
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px',display:'flex',justifyContent:'space-between',alignItems:'center'}},[
+    div({style:{fontSize:'14px',fontWeight:'700'}},`🎵 ${L('sound')}`),
+    btn({style:{width:'46px',height:'26px',borderRadius:'13px',border:'none',background:ST.soundOn?t.AC:t.MU,position:'relative',transition:'background .2s'},onclick(){
+      ST.soundOn=!ST.soundOn;LS.set('soundOn',ST.soundOn);render();
+    }},[div({style:{width:'20px',height:'20px',borderRadius:'50%',background:'#0D0D0D',position:'absolute',top:'3px',left:ST.soundOn?'23px':'3px',transition:'left .2s'}})]),
+  ]));
+
+  // Notifications
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'10px'}},'🔔 '+L('reminder')),
+    btn({style:{width:'100%',padding:'11px',borderRadius:'12px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'13px'},onclick(){
+      if(Notification&&Notification.permission!=='granted')Notification.requestPermission().then(()=>render());
+    }},Notification&&Notification.permission==='granted'?L('notifOn'):L('notifBtn')),
+  ]));
+
+  // AI Coach Endpoint
+  nodes.push((()=>{
+    if(!window._epForm)window._epForm=ST.aiEndpoint;
+    return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'6px'}},'🤖 AI Coach Endpoint'),
+      div({style:{fontSize:'10px',color:t.DM,marginBottom:'10px',lineHeight:'1.5'}},ST.lang==='am'?'ሙሉ AI Coach (real Claude) ለማግኘት የራስህን Cloudflare Worker URL እዚህ ለጥፍ። ካልተቀመጠ local coach ብቻ ይሠራል።':'Paste your Cloudflare Worker URL here to enable the real AI coach. Without it, only the local coach runs.'),
+      inp({type:'url',placeholder:'https://limad-ai.your-name.workers.dev',value:window._epForm,style:{width:'100%',padding:'11px 14px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none',marginBottom:'10px'},oninput(e){window._epForm=e.target.value.trim();}}),
+      btn({style:{width:'100%',padding:'11px',borderRadius:'12px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'13px'},onclick(){
+        ST.aiEndpoint=window._epForm;LS.set('aiEndpoint',ST.aiEndpoint);showFlash(ST.lang==='am'?'✓ ተቀምጧል':'✓ Saved');render();
+      }},ST.lang==='am'?'አስቀምጥ':'Save'),
+      ST.aiEndpoint?div({style:{fontSize:'10px',color:t.AC,marginTop:'8px'}},'✓ '+(ST.lang==='am'?'ተገናኝቷል':'Connected')):null,
+    ]);
+  })());
+
+  // Auto Backup (Telegram)
+  nodes.push((()=>{
+    if(!window._tgForm)window._tgForm={token:ST.tgToken,chat:ST.tgChatId};
+    const f=window._tgForm;
+    return div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+      div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'6px'}},'🔒 '+(ST.lang==='am'?'ራስ-ሰር ምትኬ (Telegram)':'Auto Backup (Telegram)')),
+      div({style:{fontSize:'10px',color:t.DM,marginBottom:'12px',lineHeight:'1.5'}},ST.lang==='am'?'@BotFather ላይ Bot ፍጠር፣ Token ውሰድ፣ Chat ID ደግሞ @userinfobot ላይ አግኝ።':'Create a bot via @BotFather, copy the token, and get your Chat ID from @userinfobot.'),
+      div({style:{fontSize:'11px',color:t.DM,marginBottom:'6px'}},'Bot Token'),
+      inp({type:'text',value:f.token,placeholder:'123456:ABC-DEF...',style:{width:'100%',padding:'11px 13px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none',marginBottom:'10px'},oninput(e){f.token=e.target.value;}}),
+      div({style:{fontSize:'11px',color:t.DM,marginBottom:'6px'}},'Chat ID'),
+      inp({type:'text',value:f.chat,placeholder:'123456789',style:{width:'100%',padding:'11px 13px',borderRadius:'12px',border:`1px solid ${t.MU}`,background:t.SB,color:t.TX,fontSize:'13px',outline:'none',marginBottom:'12px'},oninput(e){f.chat=e.target.value;}}),
+      div({style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}},[
+        div({style:{fontSize:'13px',fontWeight:'600'}},ST.lang==='am'?'በየቀኑ ራስ-ሰር ላክ':'Auto-send daily'),
+        btn({style:{width:'46px',height:'26px',borderRadius:'13px',border:'none',background:ST.autoBackupOn?t.AC:t.MU,position:'relative'},onclick(){
+          ST.autoBackupOn=!ST.autoBackupOn;LS.set('autoBackupOn',ST.autoBackupOn);render();
+        }},[div({style:{width:'20px',height:'20px',borderRadius:'50%',background:'#fff',position:'absolute',top:'3px',left:ST.autoBackupOn?'23px':'3px',transition:'left .15s'}})]),
+      ]),
+      div({style:{display:'flex',gap:'10px'}},[
+        btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:'none',background:t.AC,color:'#0D0D0D',fontWeight:'700',fontSize:'13px'},onclick(){
+          ST.tgToken=f.token.trim();ST.tgChatId=f.chat.trim();LS.set('tgToken',ST.tgToken);LS.set('tgChatId',ST.tgChatId);
+          showFlash('✓ '+(ST.lang==='am'?'ተቀምጧል':'Saved'));render();
+        }},ST.lang==='am'?'አስቀምጥ':'Save'),
+        btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'13px'},onclick(){
+          ST.tgToken=f.token.trim();ST.tgChatId=f.chat.trim();LS.set('tgToken',ST.tgToken);LS.set('tgChatId',ST.tgChatId);
+          showFlash('📤 '+(ST.lang==='am'?'እየላከ ነው...':'Sending...'));render();
+          sendBackupToTelegram(false);
+        }},'📤 '+(ST.lang==='am'?'አሁን ላክ':'Backup Now')),
+      ]),
+      ST.lastBackupDate?div({style:{fontSize:'10px',color:t.DM,marginTop:'10px'}},(ST.lang==='am'?'የመጨረሻ ምትኬ፦ ':'Last backup: ')+ST.lastBackupDate):null,
+    ]);
+  })());
+
+  // Export / Import
+  nodes.push(div({style:{background:t.CARD,borderRadius:'20px',padding:'18px',marginBottom:'12px'}},[
+    div({style:{fontSize:'14px',fontWeight:'700',marginBottom:'12px'}},`☁️ ${L('dataManage')}`),
+    div({style:{display:'flex',gap:'10px'}},[
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'13px'},onclick(){
+        const blob=new Blob([JSON.stringify(collectBackupData(),null,2)],{type:'application/json'});
+        const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='limad-backup.json';a.click();
+      }},L('export')),
+      btn({style:{flex:'1',padding:'11px',borderRadius:'14px',border:`1px solid ${t.MU}`,background:'transparent',color:t.TX,fontWeight:'600',fontSize:'13px'},onclick(){
+        const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+        inp.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{const d=JSON.parse(ev.target.result);if(d.habits){ST.habits=d.habits;LS.set('habits',d.habits);}if(d.logs){ST.logs=d.logs;LS.set('logs',d.logs);}if(d.xp!=null){ST.xp=d.xp;LS.set('xp',d.xp);}if(d.profile){ST.profile=d.profile;LS.set('profile',d.profile);}render();}catch{}};r.readAsText(f);};inp.click();
+      }},L('import')),
+    ]),
+    div({style:{fontSize:'10px',color:t.DM,marginTop:'10px',lineHeight:'1.5'}},ST.lang==='am'?'ዳታ phone ላይ localStorage ውስጥ ይቀማጣል። Export ሲያደርጉ JSON ፋይል ያወርዳሉ።':'Data is saved in your phone\'s localStorage. Export creates a JSON backup file.'),
+    (()=>{
+      if(!window._pdfState)window._pdfState={busy:false};
+      const p=window._pdfState;
+      return btn({style:{width:'100%',marginTop:'12px',padding:'11px',borderRadius:'14px',border:`1px solid ${t.AC}`,background:'transparent',color:t.AC,fontWeight:'600',fontSize:'13px'},onclick(){
+        if(p.busy)return;p.busy=true;render();
+        generatePdfReport(ok=>{p.busy=false;showFlash(ok?L('pdfDone'):'✕ Error');render();});
+      }},p.busy?L('pdfGen'):L('pdfReport'));
+    })(),
+    !ST.online?div({style:{fontSize:'10px',color:t.DM,marginTop:'8px',lineHeight:'1.5'}},L('pdfOfflineNote')):null,
+  ]));
+
+  // Home / Reset PIN
+  nodes.push(div({style:{display:'flex',gap:'10px',marginBottom:'20px'}},[
+    btn({style:{flex:'1',padding:'10px 0',borderRadius:'12px',border:`1px solid ${t.MU}`,background:'transparent',color:t.DM,fontSize:'12px'},onclick(){ST.screen='splash';render();}},L('homeBtn')),
+    btn({style:{flex:'1',padding:'10px 0',borderRadius:'12px',border:'1px solid #E84747',background:'transparent',color:'#E84747',fontSize:'12px'},onclick(){LS.set('pin',null);ST.hasPin=false;ST.screen='pin';ST.digits=[];render();}},L('resetPin')),
+  ]));
+
+  return div({},nodes);
+}
+
+// ── AUTO BACKUP (Telegram) ───────────────────────────────────────
+function collectBackupData(){
+  return{
+    habits:ST.habits,logs:ST.logs,xp:ST.xp,coins:ST.coins,profile:ST.profile,goals:ST.goals,
+    xpLog:ST.xpLog,unlockedThemes:ST.unlockedThemes,unlockedAvatars:ST.unlockedAvatars,
+    claimedBadges:ST.claimedBadges,freezeDates:ST.freezeDates,freezeAvail:ST.freezeAvail,
+    theme:ST.theme,lang:ST.lang,exported:new Date().toISOString(),
+  };
+}
+async function sendBackupToTelegram(silent){
+  if(!ST.tgToken||!ST.tgChatId){
+    if(!silent)showFlash(ST.lang==='am'?'⚙️ መጀመሪያ Bot Token እና Chat ID አስገባ':'⚙️ Add Bot Token and Chat ID first');
+    return false;
+  }
+  try{
+    const data=collectBackupData();
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+    const fd=new FormData();
+    fd.append('chat_id',ST.tgChatId);
+    fd.append('document',blob,`limad-backup-${today()}.json`);
+    fd.append('caption',ST.lang==='am'?'🔒 LIMAD ራስ-ሰር ምትኬ':'🔒 LIMAD auto backup');
+    const r=await fetch(`https://api.telegram.org/bot${ST.tgToken}/sendDocument`,{method:'POST',body:fd});
+    const j=await r.json();
+    if(j.ok){
+      ST.lastBackupDate=today();LS.set('lastBackupDate',today());
+      if(!silent){showFlash('✓ '+(ST.lang==='am'?'ምትኬ ተልኳል!':'Backup sent!'));render();}
+      return true;
+    }
+    if(!silent){showFlash('⚠️ '+(j.description||(ST.lang==='am'?'ስህተት ተፈጥሯል':'Failed')));render();}
+    return false;
+  }catch{
+    if(!silent){showFlash('⚠️ '+(ST.lang==='am'?'ኢንተርኔት ያረጋግጡ':'Check your internet'));render();}
+    return false;
+  }
+}
+function maybeAutoBackup(){
+  if(!ST.autoBackupOn||!ST.tgToken||!ST.tgChatId)return;
+  if(ST.lastBackupDate===today())return;
+  if(typeof navigator!=='undefined'&&!navigator.onLine)return;
+  sendBackupToTelegram(true);
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+const seen=LS.get('seen');
+loadState();
+if(!seen){ST.screen='splash';}
+else{ST.screen='pin';}
+render();
+maybeAutoBackup();
+</script>
+</body>
+</html>
